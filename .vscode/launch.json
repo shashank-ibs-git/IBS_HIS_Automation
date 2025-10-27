@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Cucumber: Run all features",
+      "program": "${workspaceFolder}/node_modules/@cucumber/cucumber/bin/cucumber-js",
+      "cwd": "${workspaceFolder}",
+      "args": ["HIS_FLIGHTBASE_B2C/features/**/*.feature"],
+      "env": {
+        "NODE_OPTIONS": "--enable-source-maps",
+        "PWDEBUG": "0"
+      },
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Cucumber: Debug (Playwright Inspector)",
+      "program": "${workspaceFolder}/node_modules/@cucumber/cucumber/bin/cucumber-js",
+      "cwd": "${workspaceFolder}",
+      "args": ["HIS_FLIGHTBASE_B2C/features/**/*.feature"],
+      "env": {
+        "NODE_OPTIONS": "--enable-source-maps",
+        "PWDEBUG": "1"
+      },
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
+    }
+  ]
+}

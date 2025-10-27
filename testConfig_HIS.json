@@ -1,0 +1,11 @@
+{
+ "_comment": "browser can be chromium, firefox, webkit; env can be dev, stage, prod",
+  "browser": "chromium",
+  "env": "stage",
+  "baseUrls": {
+    "dev": "https://dev-overseas-air.his-j.com/",
+    "stage": "https://stg-overseas-air.his-j.com/",
+    "prod": "https://testerbud.com"
+  },
+  "headless": false
+}

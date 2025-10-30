@@ -1,10 +1,17 @@
 
+/**
+ * Utilities - small helper functions used across steps/hooks.
+ * @class
+ */
 class Utilities {
   constructor(page) {
     this.page = page;
   }
 
-  // ✅ waits for spinner to disappear (hidden or removed)
+  /**
+   * Wait for the site spinner to disappear (either hidden or detached).
+   * @param {number} [timeout=60000]
+   */
   async waitForSpinnerToDisappear(timeout = 60000) {
     const spinner = this.page.locator("//div[@class='his-desktop']//div[@class='spinner']");
     console.log('⏳ Waiting for spinner to disappear...');

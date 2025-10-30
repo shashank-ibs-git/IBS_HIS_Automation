@@ -2,8 +2,10 @@ const { TopPage } = require("./TopPage");
 const { SearchResultsPage } = require("./SearchResultsPage");
 const { PassengerInfoPage } = require("./PassengerInfoPage");
 const {LoginFlightBaseModule} = require("./LoginFlightBaseModule");
+const {AdditionalServicePage} = require("./AdditionalServicePage");
+const {ConfirmInputPage} = require("./ConfirmInputPage");
+const {PaymentPage} = require("./PaymentPage");
 
-//const { FlightBookingPageTb } = require("./FlightBookingPageTb");
 /**
  * @class POManager
  */
@@ -18,6 +20,9 @@ const {LoginFlightBaseModule} = require("./LoginFlightBaseModule");
     this.searchResultsPage = new SearchResultsPage(page);
     this.passengerInfoPage = new PassengerInfoPage(page);
     this.loginFlightBaseModule = new LoginFlightBaseModule(page);
+    this.additionalServicePage = new AdditionalServicePage(page);
+    this.confirmInputPage = new ConfirmInputPage(page);
+    this.paymentPage = new PaymentPage(page);
   }
 
   getTopPage() {
@@ -32,18 +37,18 @@ const {LoginFlightBaseModule} = require("./LoginFlightBaseModule");
   getLoginFlightBaseModule() {
     return this.loginFlightBaseModule;
   }
-
-
-
-
-
-
-
-
-
-
-  
+  getAdditionalServicePage() {
+    return this.additionalServicePage;
   }
+  getConfirmInputPage() {
+    return this.confirmInputPage;
+  }
+  getPaymentPage() {
+    return this.paymentPage;
+  }
+
+
+}
 
 
 module.exports = { POManager };

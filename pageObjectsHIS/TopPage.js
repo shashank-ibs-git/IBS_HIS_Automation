@@ -69,12 +69,12 @@ class TopPage {
   }
   async selectDepartureDate(month, year, date) {
     await this.departureDateField.click();
-    await this.selectCalendarDate(month, year, date);
+    await this.selectCalendarDate2(month, year, date);
   }
 
   async selectReturnDate(month, year, date) {
     await this.destinationDateField.click();
-    await this.selectCalendarDate(month, year, date);
+    await this.selectCalendarDate2(month, year, date);
   }
  
   async setAdultPassengerCount(desiredCount) {
@@ -186,6 +186,113 @@ async selectCalendarDate(month, year, date) {
   );
   await dayInTargetPanel.first().click();
 }
+
+async selectCalendarDate1(targetMonth, targetYear, targetDay) {
+  const nextBtn = this.page.locator("//button[@aria-label='Next Month']");
+  const prevBtn = this.page.locator("//button[@aria-label='Previous Month']");
+  const headers = this.page.locator("//div[@class='react-datepicker__current-month']");
+  const monthContainers = this.page.locator("//div[contains(@class,'react-datepicker__month-container')]");
+
+  // helper: get month/year numbers from header text like "11月 2025"
+  const getMonthYear = async (header) => {
+    const text = (await header.innerText()).trim();
+    const [monthTxt, yearTxt] = text.split(' ');
+    return { month: parseInt(monthTxt.replace('月', '')), year: parseInt(yearTxt) };
+  };
+
+  for (let i = 0; i < 24; i++) {
+    const left = await getMonthYear(headers.nth(0));
+    const right = await getMonthYear(headers.nth(1));
+
+    // check if target matches left or right calendar
+    if (left.month === targetMonth && left.year === targetYear) {
+      await monthContainers.nth(0)
+        .locator(".react-datepicker__day:not(.react-datepicker__day--outside-month)")
+        .getByText(String(targetDay), { exact: true })
+        .click();
+      return;
+    }
+
+    if (right.month === targetMonth && right.year === targetYear) {
+      await monthContainers.nth(1)
+        .locator(".react-datepicker__day:not(.react-datepicker__day--outside-month)")
+        .getByText(String(targetDay), { exact: true })
+        .click();
+      return;
+    }
+
+    // decide which direction to move
+    if (right.year < targetYear || (right.year === targetYear && right.month < targetMonth)) {
+      await nextBtn.click();
+    } else {
+      await prevBtn.click();
+    }
+
+    await this.page.waitForTimeout(200);
+  }
+
+  throw new Error(`Could not find month ${targetMonth}/${targetYear}`);
+}
+
+async selectCalendarDate2(targetMonth, targetYear, targetDay) {
+  const nextBtn = this.page.locator("//button[@aria-label='Next Month']");
+  const prevBtn = this.page.locator("//button[@aria-label='Previous Month']");
+  const headers = this.page.locator("//div[@class='react-datepicker__current-month']");
+  const months  = this.page.locator("//div[contains(@class,'react-datepicker__month-container')]");
+
+  targetMonth = Number(targetMonth);
+  targetYear  = Number(targetYear);
+  const idx = (y, m) => y * 12 + m;
+
+  const parseHeader = async (h) => {
+    const t = (await h.innerText()).trim().replace(/\s+/g, ' '); // normalize spaces
+    const [mTxt, yTxt] = t.split(' ');
+    return { m: parseInt(mTxt.replace('月', ''), 10), y: parseInt(yTxt, 10) };
+  };
+
+  for (let i = 0; i < 24; i++) {
+    const left  = await parseHeader(headers.nth(0));
+    const right = await parseHeader(headers.nth(1));
+
+    const leftIdx   = idx(left.y, left.m);
+    const rightIdx  = idx(right.y, right.m);
+    const targetIdx = idx(targetYear, targetMonth);
+
+    const dd = String(Number(targetDay)).padStart(2, '0');
+
+    // If either panel matches, click inside that panel and return
+    if (targetIdx === leftIdx) {
+      await months.nth(0)
+        .locator(`.react-datepicker__day--0${dd}:not(.react-datepicker__day--outside-month):not([aria-disabled="true"])`)
+        .first()
+        .click();
+      return;
+    }
+    if (targetIdx === rightIdx) {
+      await months.nth(1)
+        .locator(`.react-datepicker__day--0${dd}:not(.react-datepicker__day--outside-month):not([aria-disabled="true"])`)
+        .first()
+        .click();
+      return;
+    }
+
+    // Decide direction using the range [left, right]
+    if (targetIdx > rightIdx) {
+      await nextBtn.click();        // target is after the right panel
+    } else if (targetIdx < leftIdx) {
+      await prevBtn.click();        // target is before the left panel
+    } else {
+      // Between left and right (shouldn't happen for contiguous months) — nudge forward
+      await nextBtn.click();
+    }
+
+    await this.page.waitForTimeout(150);
+  }
+
+  throw new Error(`Could not reach ${targetYear}-${String(targetMonth).padStart(2, '0')}`);
+}
+
+
 
 
 

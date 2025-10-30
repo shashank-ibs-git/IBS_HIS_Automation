@@ -3,7 +3,10 @@ class PassengerInfoPage {
     this.page = page;
     this.passengerInfoPageSection = page.locator(".p-section__contents").first();
     this.loginAndRegisterButton = page.locator("//div[@class='p-login__button']//button");
+
+    //==Applicant Information locators==
     this.applicantInfoSection = page.locator("//div[@class='p-reservation-info']//h3[text()='申込者情報']");
+    this.applicantInfoNameKanaField = page.locator("//h3[text()='申込者情報']//parent::div/following-sibling::div/dl");
 
     // ==== Passenger form fields ====
      this.surnameKanaLocator = page.getByRole('textbox', { name: '例：KOKUNAI' });
@@ -21,7 +24,7 @@ class PassengerInfoPage {
     this.contactPhoneExampleField = page.getByRole('textbox', { name: '例：09012345678' });
     this.relationship = page.locator('#relationShip_emergency');
     // ==== Actions / navigation ====
-    this.nextToAddOnsButton = page.locator("//a[contains(text(),'追加サービスの選択に進む')]");
+    this.nextToAddOnsButton = page.locator("//a/span[contains(text(),'追加サービスの選択に進む')]");
 
     // ==== Minor consent ====
     this.minorConsentCheckbox = (index) => page.locator(`label[for='parentconsent01_${index}']`);
@@ -33,6 +36,38 @@ async clickLoginAndRegister() {
     await loginRegisterBtn.click();
     await this.page.waitForLoadState('networkidle');
   }
+
+async getApplicantInformation() {
+  // Find the part of the page that contains applicant information
+  const dl = this.applicantInfoNameKanaField;
+  // Get all the text from <dt> tags (these are labels like "Name", "Date of Birth", etc.)
+  const labels = (await dl.locator("dt").allInnerTexts()).map(t => t.trim());
+  // Get all the text from <dd> tags (these are the actual values entered)
+  const rawValues = await dl.locator("dd").allInnerTexts();
+  // Go through each value and clean it up
+  const values = rawValues.map((text, index) => {
+    // Remove spaces at the beginning and end
+    let value = text.trim();
+
+    // If this label is for "Date of Birth" (生年月日), remove all extra spaces inside too
+    if (labels[index] && labels[index].includes("生年月日")) {
+      value = value.replace(/\s+/g, ""); // removes all spaces inside the string
+    }
+    // Return the cleaned value
+    return value;
+  });
+
+  // Combine labels and values into one object (like { Name: "コクナイ タロウ", DOB: "1989年8月17日" })
+  const info = {};
+  for (let i = 0; i < labels.length; i++) {
+    info[labels[i]] = values[i] || "";
+  }
+  // Return the final object
+  return info;
+}
+
+
+
 
     /**
    * Fill passenger name (Katakana) for a specific passenger block
@@ -58,7 +93,8 @@ async clickLoginAndRegister() {
     await this.birthYearLocator.nth(index).selectOption(year);
     await this.birthMonthLocator.nth(index).selectOption(month);
     await this.birthDayLocator.nth(index).selectOption(day);
-    if(year >= new Date().getFullYear() - 5) {
+    const yearNum = parseInt(year, 10);
+    if(yearNum >= new Date().getFullYear() - 18) { // less than 18 years old
       await this.page.waitForTimeout(500); // slight delay to allow minor consent checkbox to appear
       await this.minorConsentCheckbox(index).click();
   }

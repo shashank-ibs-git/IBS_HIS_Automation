@@ -19,6 +19,7 @@ Feature: Flight BASE UI Sanity - End-to-End Flow
     Then user should be able to enter mandatory passenger details
     When the user proceeds to select additional services
     Then Option Selection Page should load with breadcrumb
+    Then the user selects additional checked baggage options
     Then HISWeb Set Insurance section should be visible
     When the user clicks “Proceed to Confirm Input Contents”
     Then Input Confirmation Page should load and display passenger details

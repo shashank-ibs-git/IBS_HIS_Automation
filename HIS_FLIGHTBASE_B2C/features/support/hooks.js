@@ -8,6 +8,18 @@ const {Utilities} = require('./Utilities');
 const fs = require('fs');
 const path = require('path');
 const util = require('util');
+// Pre-load shared test data (static) so step files can just access this.testData
+let sharedTestData = null;
+try {
+  const testDataFile = path.resolve(process.cwd(), 'testData.json');
+  if (fs.existsSync(testDataFile)) {
+    sharedTestData = JSON.parse(fs.readFileSync(testDataFile, 'utf8'));
+  } else {
+    console.warn('⚠️  testData.json not found at', testDataFile, '— steps expecting this.testData may fail.');
+  }
+} catch (e) {
+  console.error('Failed to load testData.json:', e.message || e);
+}
 
 setDefaultTimeout(30000);
 
@@ -95,6 +107,9 @@ Before(async function () {
   this.browserName = BROWSER_NAME;
   this.envName     = ENV_NAME;
   this.baseUrl     = BASE_URL;
+  this.testData    = sharedTestData; // attach static data to World
+  // Centralized ASSERT_TIMEOUT (fallback 10000 if not provided in testData)
+  this.ASSERT_TIMEOUT = (sharedTestData && typeof sharedTestData.assertTimeout === 'number') ? sharedTestData.assertTimeout : 10000;
 
   // Page Objects
   this.poManager = new POManager(page);
@@ -135,6 +150,35 @@ AfterStep(async function ({ result, pickleStep }) {
         console.error('Saved failing page HTML to', htmlPath);
       } catch (e) {
         console.error('Could not save page HTML:', e && e.message ? e.message : e);
+      }
+
+      // ---- Stack frame summary (first project-local frame) ----
+      try {
+  const ex = result && result.exception ? /** @type {any} */(result.exception) : null;
+  const stack = (ex && (ex.stackTrace || ex.stack)) || '';
+        if (stack) {
+          const lines = String(stack).split(/\r?\n/);
+          const rootNormalized = process.cwd().replace(/\\/g, '/');
+          const localFrame = lines.find(l => l.includes(rootNormalized));
+          if (localFrame) {
+            console.error('➡ First project frame:', localFrame.trim());
+            // Attempt to extract file:line:col
+            const match = localFrame.match(/(.*?)([A-Za-z]:[^:]+):(\d+):(\d+)/);
+            if (match) {
+              const summary = `file=${match[2]} line=${match[3]} col=${match[4]} frame=${localFrame.trim()}`;
+              const dir = path.resolve(process.cwd(), 'screenshots');
+              const safe = pickleStep.text.replace(/[^a-z0-9-_]/gi, '_').slice(0,50);
+              const ts2 = new Date().toISOString().replace(/T/, '_').replace(/:/g,'-').replace(/\..+/, '');
+              const summaryPath = path.join(dir, `stack-summary-${safe}-${ts2}.txt`);
+              fs.writeFileSync(summaryPath, summary);
+              console.error('Saved stack summary to', summaryPath);
+            }
+          } else {
+            console.error('No project-local stack frame found. Full stack follows:\n', stack);
+          }
+        }
+      } catch (e) {
+        console.error('Error while summarizing stack frames:', e.message || e);
       }
     } catch (e) {
       console.error('Error while logging AfterStep exception details:', e);

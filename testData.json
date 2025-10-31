@@ -1,0 +1,46 @@
+{
+  "assertTimeout": 10000,
+  "flight": {
+    "carrier": "JQ",
+    "departureDate": { "month": "11", "year": "2025", "day": "01" },
+    "returnDate": { "month": "11", "year": "2025", "day": "10" },
+    "departureAirport": "成田国際空港",
+    "destinationAirport": "ブリスベン空港",
+    "adultPassengerCount": 1,
+    "childPassengerCount": 1,
+    "seatClass": "ECONOMY",
+    "flightTabLabel": "航空券"
+  },
+  "login": {
+    "email": "shashank.channegowda@ibsplc.com",
+    "password": "TestingIBS123!"
+  },
+  "passengers": [
+    { "type": "adult",  "surname": "KOKUNAI", "given": "TARO",   "y": "1990", "m": "12", "d": "12", "gender": "male",   "nationality": "アンギラ" },
+    { "type": "child",  "surname": "KOKUNAI", "given": "HANAKO", "y": "2021", "m": "12", "d": "12", "gender": "female", "nationality": "アンギラ" },
+    { "type": "infant", "surname": "KOKUNAI", "given": "TANAKO", "y": "2024", "m": "01", "d": "05", "gender": "male",   "nationality": "アンギラ" }
+  ],
+  "contacts": {
+    "phone": "09012345678",
+    "domestic": { "nameKana": "ヤマダハナコ", "phone": "09087654321", "relationship": "父" }
+  },
+  "labels": {
+    "surname": ["姓（SurName）", "姓 (SurName)"],
+    "given": ["名（GivenName）", "名 (GivenName)"],
+    "dob": ["生年月日"],
+    "gender": ["性別"],
+    "nation": ["国籍"]
+  },
+  "additionalServices": {
+    "breadcrumbHeader": "追加サービス選択"
+  },
+  "payment": {
+    "card": {
+      "number": "4111111111111111",
+      "expYear": "2030",
+      "expMonth": "12",
+      "holderName": "TARO KOKUNAI",
+      "cvc": "1234"
+    }
+  }
+}

@@ -5,6 +5,7 @@ const {LoginFlightBaseModule} = require("./LoginFlightBaseModule");
 const {AdditionalServicePage} = require("./AdditionalServicePage");
 const {ConfirmInputPage} = require("./ConfirmInputPage");
 const {PaymentPage} = require("./PaymentPage");
+const {EnterPaymentPage} = require("./EnterPaymentPage");
 
 /**
  * @class POManager
@@ -23,6 +24,7 @@ const {PaymentPage} = require("./PaymentPage");
     this.additionalServicePage = new AdditionalServicePage(page);
     this.confirmInputPage = new ConfirmInputPage(page);
     this.paymentPage = new PaymentPage(page);
+    this.enterPaymentPage = new EnterPaymentPage(page);
   }
 
   getTopPage() {
@@ -45,6 +47,9 @@ const {PaymentPage} = require("./PaymentPage");
   }
   getPaymentPage() {
     return this.paymentPage;
+  }
+  getEnterPaymentPage() {
+    return this.enterPaymentPage;
   }
 
 

@@ -69,13 +69,25 @@ class TopPage {
   }
   async selectDepartureDate(month, year, date) {
     await this.departureDateField.click();
-    await this.selectCalendarDate2(month, year, date);
+    await this.selectCalendarDate(month, year, date);
   }
 
   async selectReturnDate(month, year, date) {
     await this.destinationDateField.click();
-    await this.selectCalendarDate2(month, year, date);
+    await this.selectCalendarDate(month, year, date);
   }
+
+  async selectAutoDates() {
+  const now   = new Date();
+  const dep   = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);
+  const ret   = new Date(dep.getFullYear(), dep.getMonth(), dep.getDate() + 7, 12);
+
+  await this.departureDateField.click();
+  await this.selectCalendarDate(dep.getMonth() + 1, dep.getFullYear(), dep.getDate());
+
+  await this.destinationDateField.click();
+  await this.selectCalendarDate(ret.getMonth() + 1, ret.getFullYear(), ret.getDate());
+}
  
   async setAdultPassengerCount(desiredCount) {
   await this.passengerSelectionField.click();
@@ -143,98 +155,7 @@ async confirmPassengerSelection() {
 }
 
 
-async selectCalendarDate(month, year, date) {
-  // Convert values to numbers/strings
-  month = Number(month);
-  year = Number(year);
-  date = String(date).padStart(2, '0'); // zero-pad day
-
-  const nextButton  = this.page.locator("//button[@aria-label='Next Month']");
-  const prevButton  = this.page.locator("//button[@aria-label='Previous Month']");
-  const monthLabelR = this.page.locator("(//div[@class='react-datepicker__current-month'])[2]"); // right header
-
-  // Navigate until the RIGHT header shows target month/year (keeps your existing logic)
-  for (let i = 0; i < 24; i++) {
-    const txt = (await monthLabelR.innerText()).trim(); // e.g. "10月 2025"
-    const [mTxt, yTxt] = txt.split(' ');
-    const curM = parseInt(mTxt.replace('月', ''), 10);
-    const curY = parseInt(yTxt, 10);
-
-    if (curM === month && curY === year) break;
-
-    if (curY < year || (curY === year && curM < month)) {
-      await nextButton.click();
-    } else {
-      await prevButton.click();
-    }
-    await this.page.waitForTimeout(150);
-  }
-
-  // 🔎 Robust: find the panel whose header matches `${month}月 ${year}`
-  const headerText = `${month}月 ${year}`;
-  const monthContainers = this.page.locator('.react-datepicker__month-container');
-  const targetPanel = monthContainers.filter({
-    has: this.page.locator('.react-datepicker__current-month', { hasText: headerText })
-  });
-
-  // Ensure the correct panel is present
-  await targetPanel.first().locator('.react-datepicker__current-month', { hasText: headerText }).waitFor();
-
-  // Click the day inside ONLY that panel
-  const dayInTargetPanel = targetPanel.locator(
-    `.react-datepicker__day--0${date}:not(.react-datepicker__day--outside-month):not([aria-disabled="true"])`
-  );
-  await dayInTargetPanel.first().click();
-}
-
-async selectCalendarDate1(targetMonth, targetYear, targetDay) {
-  const nextBtn = this.page.locator("//button[@aria-label='Next Month']");
-  const prevBtn = this.page.locator("//button[@aria-label='Previous Month']");
-  const headers = this.page.locator("//div[@class='react-datepicker__current-month']");
-  const monthContainers = this.page.locator("//div[contains(@class,'react-datepicker__month-container')]");
-
-  // helper: get month/year numbers from header text like "11月 2025"
-  const getMonthYear = async (header) => {
-    const text = (await header.innerText()).trim();
-    const [monthTxt, yearTxt] = text.split(' ');
-    return { month: parseInt(monthTxt.replace('月', '')), year: parseInt(yearTxt) };
-  };
-
-  for (let i = 0; i < 24; i++) {
-    const left = await getMonthYear(headers.nth(0));
-    const right = await getMonthYear(headers.nth(1));
-
-    // check if target matches left or right calendar
-    if (left.month === targetMonth && left.year === targetYear) {
-      await monthContainers.nth(0)
-        .locator(".react-datepicker__day:not(.react-datepicker__day--outside-month)")
-        .getByText(String(targetDay), { exact: true })
-        .click();
-      return;
-    }
-
-    if (right.month === targetMonth && right.year === targetYear) {
-      await monthContainers.nth(1)
-        .locator(".react-datepicker__day:not(.react-datepicker__day--outside-month)")
-        .getByText(String(targetDay), { exact: true })
-        .click();
-      return;
-    }
-
-    // decide which direction to move
-    if (right.year < targetYear || (right.year === targetYear && right.month < targetMonth)) {
-      await nextBtn.click();
-    } else {
-      await prevBtn.click();
-    }
-
-    await this.page.waitForTimeout(200);
-  }
-
-  throw new Error(`Could not find month ${targetMonth}/${targetYear}`);
-}
-
-async selectCalendarDate2(targetMonth, targetYear, targetDay) {
+async selectCalendarDate(targetMonth, targetYear, targetDay) {
   const nextBtn = this.page.locator("//button[@aria-label='Next Month']");
   const prevBtn = this.page.locator("//button[@aria-label='Previous Month']");
   const headers = this.page.locator("//div[@class='react-datepicker__current-month']");

@@ -1,5 +1,4 @@
-{
- "_comment": "browser can be chromium, firefox, webkit; env can be dev, stage, prod",
+{ "_comment": "browser can be chromium, firefox, webkit; env can be dev, stage, prod",
   "browser": "chromium",
   "env": "stage",
   "baseUrls": {

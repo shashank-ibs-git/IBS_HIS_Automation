@@ -49,23 +49,18 @@ class TopPage {
     async selectDepartureCity(city) {
       await this.departureField.click();
       await this.departureSuggestionField.fill(city);
-      const cityOption = this.page.locator(
-      `//div[@class='c-destination-history overflow-autosuggest']//span[normalize-space(.)='${city}']`
-    ).first();
+      const cityLocator = this.page.locator(`//div[@class='c-destination-history overflow-autosuggest']//span[contains(normalize-space(.), '${city}')]`).first();
     // wait until the option becomes visible, then click
-    await cityOption.waitFor({ state: 'visible', timeout: 10000 });
-    await cityOption.click();
+    await cityLocator.waitFor({ state: 'visible', timeout: 10000 });
+    await cityLocator.click();
     }
   async selectDestinationCity(city) {
     await this.destinationField.click();
     await this.destinationSuggestionField.fill(city);
-
-    const cityOption = this.page.locator(
-      `//div[@class='c-destination-history overflow-autosuggest']//span[normalize-space(.)='${city}']`
-    ).first();
+    const cityLocator = this.page.locator(`//div[@class='c-destination-history overflow-autosuggest']//span[contains(normalize-space(.), '${city}')]`).first();
     // wait until the option becomes visible, then click
-    await cityOption.waitFor({ state: 'visible', timeout: 10000 });
-    await cityOption.click();
+    await cityLocator.waitFor({ state: 'visible', timeout: 10000 });
+    await cityLocator.click();
   }
   async selectDepartureDate(month, year, date) {
     await this.departureDateField.click();
@@ -77,11 +72,24 @@ class TopPage {
     await this.selectCalendarDate(month, year, date);
   }
 
-  async selectAutoDates() {
-  const now   = new Date();
-  const dep   = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);
-  const ret   = new Date(dep.getFullYear(), dep.getMonth(), dep.getDate() + 7, 12);
+ // monthsFromNow: 0 = this month, 1 = next month, 2 = two months ahead, etc.
+async selectAutoDates(monthsFromNow = 0) {
+  const now = new Date();
 
+  // Build departure: jump months ahead, then pick (today+1) clamped to that month's last day
+  const target = new Date(now);
+  target.setMonth(target.getMonth() + monthsFromNow);
+
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  const depDay  = Math.min(now.getDate() + 1, lastDay);
+
+  const dep = new Date(target.getFullYear(), target.getMonth(), depDay, 12, 0, 0, 0);
+
+  // Return = 7 days after departure
+  const ret = new Date(dep);
+  ret.setDate(ret.getDate() + 7);
+
+  // Select in UI
   await this.departureDateField.click();
   await this.selectCalendarDate(dep.getMonth() + 1, dep.getFullYear(), dep.getDate());
 

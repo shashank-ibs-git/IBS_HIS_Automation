@@ -7,7 +7,12 @@
     // Silence TypeScript 6 deprecation warnings for options that will change in TS 7.
     // This keeps baseUrl working for now. See https://aka.ms/ts6
     "ignoreDeprecations": "6.0",
-    "typeRoots": ["./types", "./node_modules/@types"]
+    "typeRoots": ["./types", "./node_modules/@types"],
+    "paths": {
+      "@pages/*": ["pageObjectsHIS/*"],
+      "@features/*": ["HIS_FLIGHTBASE_B2C/features/*"],
+      "@support/*": ["HIS_FLIGHTBASE_B2C/features/support/*"]
+    }
   },
   "include": [
     "**/*.js",

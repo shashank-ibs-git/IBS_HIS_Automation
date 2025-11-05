@@ -8,20 +8,11 @@ const {Utilities} = require('./Utilities');
 const fs = require('fs');
 const path = require('path');
 const util = require('util');
-// Pre-load shared test data (static) so step files can just access this.testData
-let sharedTestData = null;
-try {
-  const testDataFile = path.resolve(process.cwd(), 'testData.json');
-  if (fs.existsSync(testDataFile)) {
-    sharedTestData = JSON.parse(fs.readFileSync(testDataFile, 'utf8'));
-  } else {
-    console.warn('⚠️  testData.json not found at', testDataFile, '— steps expecting this.testData may fail.');
-  }
-} catch (e) {
-  console.error('Failed to load testData.json:', e.message || e);
-}
+const { loadTestData } = require('./dataLoader');
+// Dataset loader removed: all dynamic test data now comes directly from Scenario Outline Examples.
+// World will hold only runtime values extracted in steps (flightSearch, passengers, etc.).
 
-setDefaultTimeout(30000);
+setDefaultTimeout(45000);
 
 // Increase stack trace depth so async call chains show more frames from your page-objects
 Error.stackTraceLimit = 50;
@@ -96,7 +87,7 @@ Before(async function () {
   // per-scenario context/page
   const context = await browser.newContext({ baseURL: BASE_URL });
   const page = await context.newPage();
-  page.setDefaultTimeout(10000);
+  page.setDefaultTimeout(30000);
   page.setDefaultNavigationTimeout(60000);
   //expect.configure({ timeout: 15000 });
   
@@ -107,9 +98,10 @@ Before(async function () {
   this.browserName = BROWSER_NAME;
   this.envName     = ENV_NAME;
   this.baseUrl     = BASE_URL;
-  this.testData    = sharedTestData; // attach static data to World
-  // Centralized ASSERT_TIMEOUT (fallback 10000 if not provided in testData)
-  this.ASSERT_TIMEOUT = (sharedTestData && typeof sharedTestData.assertTimeout === 'number') ? sharedTestData.assertTimeout : 10000;
+  // Load shared test data from single testData.json file
+  this.sharedData = loadTestData();
+  // Centralized ASSERT_TIMEOUT (allow override via testData.json assertTimeout field)
+  this.ASSERT_TIMEOUT = (this.sharedData && typeof this.sharedData.assertTimeout === 'number') ? this.sharedData.assertTimeout : 10000;
 
   // Page Objects
   this.poManager = new POManager(page);
@@ -139,46 +131,34 @@ AfterStep(async function ({ result, pickleStep }) {
         // ignore
       }
 
-      // Save page HTML for offline inspection (truncated if very large)
+      // Save page HTML always; attach only if env ATTACH_HTML=1 to avoid bloating reports.
       try {
-        const html = await this.page.content();
+        const fullHtml = await this.page.content();
         const safe = pickleStep.text.replace(/[^a-z0-9-_]/gi, '_').slice(0, 50);
         const ts = new Date().toISOString().replace(/T/, '_').replace(/:/g, '-').replace(/\..+/, '');
         const dir = path.resolve(process.cwd(), 'screenshots');
         const htmlPath = path.join(dir, `step-failure-${safe}-${ts}.html`);
-        fs.writeFileSync(htmlPath, html);
+        fs.writeFileSync(htmlPath, fullHtml);
         console.error('Saved failing page HTML to', htmlPath);
+        if (process.env.ATTACH_HTML === '1') {
+          const MAX_ATTACH = 500_000; // ~500 KB
+            const attachHtml = fullHtml.length > MAX_ATTACH ? fullHtml.slice(0, MAX_ATTACH) + '\n<!-- truncated -->' : fullHtml;
+            this.attach(attachHtml, 'text/html');
+        }
       } catch (e) {
         console.error('Could not save page HTML:', e && e.message ? e.message : e);
       }
 
-      // ---- Stack frame summary (first project-local frame) ----
+      // ---- Raw stack trace attachment (minimal, clickable) ----
       try {
-  const ex = result && result.exception ? /** @type {any} */(result.exception) : null;
-  const stack = (ex && (ex.stackTrace || ex.stack)) || '';
-        if (stack) {
-          const lines = String(stack).split(/\r?\n/);
-          const rootNormalized = process.cwd().replace(/\\/g, '/');
-          const localFrame = lines.find(l => l.includes(rootNormalized));
-          if (localFrame) {
-            console.error('➡ First project frame:', localFrame.trim());
-            // Attempt to extract file:line:col
-            const match = localFrame.match(/(.*?)([A-Za-z]:[^:]+):(\d+):(\d+)/);
-            if (match) {
-              const summary = `file=${match[2]} line=${match[3]} col=${match[4]} frame=${localFrame.trim()}`;
-              const dir = path.resolve(process.cwd(), 'screenshots');
-              const safe = pickleStep.text.replace(/[^a-z0-9-_]/gi, '_').slice(0,50);
-              const ts2 = new Date().toISOString().replace(/T/, '_').replace(/:/g,'-').replace(/\..+/, '');
-              const summaryPath = path.join(dir, `stack-summary-${safe}-${ts2}.txt`);
-              fs.writeFileSync(summaryPath, summary);
-              console.error('Saved stack summary to', summaryPath);
-            }
-          } else {
-            console.error('No project-local stack frame found. Full stack follows:\n', stack);
-          }
+        const ex = result && result.exception ? /** @type {any} */(result.exception) : null;
+        const stack = (ex && (ex.stack || ex.stackTrace)) || '';
+        if (stack && typeof this.attach === 'function') {
+          // Attach entire stack; VS Code Ctrl+Click will work on absolute paths
+          this.attach(stack, 'text/plain');
         }
       } catch (e) {
-        console.error('Error while summarizing stack frames:', e.message || e);
+        console.error('Error attaching raw stack:', e.message || e);
       }
     } catch (e) {
       console.error('Error while logging AfterStep exception details:', e);

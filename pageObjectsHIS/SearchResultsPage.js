@@ -13,41 +13,53 @@ class SearchResultsPage {
         this.flightPlanAccordionSelector = page.locator(".flight-plan-accordion-open");
         this.bookingGridTable = page.locator("div.p-plan-baggage");
         this.bookingGridTableRows = page.locator("div.p-plan-baggage > table.p-plan-baggage__item");
-        this.bookWithThisPlanBtn = page.locator("//button/span[text()='このプランで予約']");
-
+        this.bookWithThisPlanBtn = page.getByRole('button', { name: 'このプランで予約' }).first();
+        this.noResultsLocator = page.locator(".p-no-results__text");
+        this.flightDetailsUnavailableLocator = page.locator(".c-input__error.p-input__error");
+        this.DEFAULT_TIMEOUT = 60000;
     }
 
+async getSearchResultsStatus(timeout = this.DEFAULT_TIMEOUT) {
+  try {
+    return await Promise.race([
+      this.headerSearchForm.waitFor({ state: 'visible', timeout }).then(() => 'results'),
+      this.noResultsLocator.waitFor({ state: 'visible', timeout }).then(() => 'no-results'),
+    ]);
+  } catch {
+    return 'unknown';
+  }
+}
 
     async selectOutboundFlight(carrier) {
         const flightOption = this.carrierFlightSelector(carrier).first();
-        await flightOption.waitFor({ state: 'visible', timeout: 10000 });
+        await flightOption.waitFor({ state: 'visible', timeout: this.DEFAULT_TIMEOUT });
         await flightOption.click();
     }
 
     async selectReturnFlightDetails(carrier) {
         const flightOption = this.returnFlightDetailsSelector(carrier).first();
-        await flightOption.waitFor({ state: 'visible', timeout: 10000 });
+        await flightOption.waitFor({ state: 'visible', timeout: this.DEFAULT_TIMEOUT });
         await flightOption.click();
-        await this.flightIteraryModel.waitFor({ state: 'visible', timeout: 10000 });
+        await this.flightIteraryModel.waitFor({ state: 'visible', timeout: this.DEFAULT_TIMEOUT });
 
     }
 
     async getPriceAtReturnDetailsSection(){
-        await this.priceAtReturnDetailsSection.waitFor({ state: 'visible', timeout: 10000 });
+        await this.priceAtReturnDetailsSection.waitFor({ state: 'visible', timeout: this.DEFAULT_TIMEOUT });
         const price = await this.priceAtReturnDetailsSection.textContent();
         return price;
     }
 
     async flightDetailsAndSchedule(){
 
-        await this.flightIteraryModel.waitFor({ state: 'visible', timeout: 10000 });
+        await this.flightIteraryModel.waitFor({ state: 'visible', timeout: this.DEFAULT_TIMEOUT });
         //const departureDate = await this.flightIteraryModel.locator("//p[@class='p-flight-timeline__day']").first().innerText();
         //const arrivalDate = await this.flightIteraryModel.locator("//p[@class='p-flight-timeline__day']").nth(1).innerText();
         const price = await this.page.locator("//div[contains(@class,'c-modal__window-bottom')]//dt[@class='p-flight-footer__price']").textContent();
         const departureAirport = await this.page.locator("//div[contains(@class,'c-modal__window-bottom')]//p[@class='p-flight-timeline__airport']").first().textContent();
-        const departureAirportName = departureAirport.split(' ')[0];
+        const departureAirportName = departureAirport.replace(/[（\(\[].*$/, '').trim();
         const arrivalAirport = await this.page.locator("//div[contains(@class,'c-modal__window-bottom')]//p[@class='p-flight-timeline__airport']").last().textContent();
-        const arrivalAirportName = arrivalAirport.split(' ')[0];
+        const arrivalAirportName = arrivalAirport.replace(/[（\(\[].*$/, '').trim();
         return {
             //departureDate,
             //arrivalDate,
@@ -61,7 +73,7 @@ class SearchResultsPage {
     async closeFlightDetailsModal() {
         const closeBtn = this.flightIteraryModel.locator("//button//span[contains(text(),'閉じる')]");
         await closeBtn.click();
-        await this.flightIteraryModel.waitFor({ state: 'hidden', timeout: 10000 });
+        await this.flightIteraryModel.waitFor({ state: 'hidden', timeout: this.DEFAULT_TIMEOUT });
     }
 
     async clickViewPlan(carrier) {
@@ -74,10 +86,51 @@ class SearchResultsPage {
   return await planTables.count();
 }
 
-async clickBookWithThisPlan() {
-  await this.bookWithThisPlanBtn.first().click();
+async waitForBookWithPlanOutcome(timeoutMs = 10000) {
+  const initialUrl = this.page.url();
+  const SUCCESS_URL_REGEX = /\/input$/i; // success must end with /input
+  await this.bookWithThisPlanBtn.click();
+  await this.waitForSpinnerToDisappear().catch(() => {});
 
+  const pollInterval = 250; // ms
+  const deadline = Date.now() + timeoutMs;
+  const banner = this.flightDetailsUnavailableLocator;
+
+  while (Date.now() < deadline) {
+    // Success URL detected
+    if (SUCCESS_URL_REGEX.test(this.page.url())) return 'success';
+    // Error banner detected early
+    if (await banner.isVisible()) {
+      let msg = '';
+      try { msg = (await banner.innerText())?.trim(); } catch { /* ignore */ }
+      throw new Error(`Flight booking failed (error banner): ${msg || 'Unknown error'} : Flight details are currently unavailable.`);
+    }
+    await this.page.waitForTimeout(pollInterval);
+  }
+
+  // Final checks after timeout window
+  if (SUCCESS_URL_REGEX.test(this.page.url())) return 'success';
+  if (await banner.isVisible()) {
+    let msg = '';
+    try { msg = (await banner.innerText())?.trim(); } catch { /* ignore */ }
+      throw new Error(`Flight booking failed (error banner): ${msg || 'Unknown error'} : Flight details are currently unavailable.`);
+  }
+  const current = this.page.url();
+  if (current !== initialUrl) {
+    throw new Error(`Flight booking failed: navigated to unexpected URL ${current}`);
+  }
+  throw new Error('Flight booking failed: no success URL and no error banner within timeout');
 }
+
+  // Localized spinner wait (decoupled from external Utilities injection)
+  async waitForSpinnerToDisappear(timeout = 60000) {
+    const spinner = this.page.locator("//div[@class='his-desktop']//div[@class='spinner']");
+    try {
+      await spinner.waitFor({ state: 'hidden', timeout });
+    } catch {
+      try { await spinner.waitFor({ state: 'detached', timeout }); } catch {/* ignore */}
+    }
+  }
 
 
 

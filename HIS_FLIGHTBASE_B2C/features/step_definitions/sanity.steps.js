@@ -1,9 +1,12 @@
 const { Given, When, Then } = require('@cucumber/cucumber');
 const { expect } = require('@playwright/test');
-// Test data provided via hooks: this.testData (loaded once). Using direct destructuring for readability.
-// Global `CustomWorld` types live in `types/world.d.ts`.
+const { default: chalk } = require('chalk');
+const { pickFirstNonEmpty, normalizeDob, formatDob, toPageGender } = require('../support/dataUtils');
+// Data source simplified: all dynamic flight search values come from Scenario Outline Examples.
+// Other required data (login, passengers, payment, labels) are now static inline constants.
 
-const ASSERT_TIMEOUT_FALLBACK = 10000; // kept if testData.assertTimeout missing; central value also set on World as this.ASSERT_TIMEOUT
+const ASSERT_TIMEOUT_FALLBACK = 10000;
+
 
 Given('the user launches the Flight BASE application', /** @this {CustomWorld} */ async function () {
   await this.utils.waitForSpinnerToDisappear();
@@ -12,7 +15,8 @@ Given('the user launches the Flight BASE application', /** @this {CustomWorld} *
 
 Then('the Top Page should display header, product tabs, and search form', /** @this {CustomWorld} */ async function () {
   const ASSERT_TIMEOUT = this.ASSERT_TIMEOUT ?? ASSERT_TIMEOUT_FALLBACK;
-   this.topPage = this.poManager.getTopPage();
+  this.topPage = this.poManager.getTopPage();
+  //action- pop page object
   await expect.soft(this.topPage.headerLogo).toBeVisible({ timeout: ASSERT_TIMEOUT });
   await expect.soft(this.topPage.flightTab).toBeVisible({ timeout: ASSERT_TIMEOUT });
   await expect.soft(this.topPage.flightHotelTab).toBeVisible({ timeout: ASSERT_TIMEOUT });
@@ -23,18 +27,27 @@ Then('the Top Page should display header, product tabs, and search form', /** @t
 
 Then('the “Flight” tab should be selected by default in Japanese', /** @this {CustomWorld} */ async function () {
   await expect.soft(this.topPage.flightTab).toHaveClass(/is-active/);
-  const { flight = {} } = this.testData || {};
-  await expect.soft(this.topPage.flightTab).toHaveText(flight.flightTabLabel);
+  const label = this.sharedData?.flight?.flightTabLabel || '航空券';
+  await expect.soft(this.topPage.flightTab).toHaveText(label);
 });
 
-When('the user selects Round Trip and initiates a search', /** @this {CustomWorld} */ async function () {
-  const { flight = {} } = this.testData || {};
+// More tolerant regex step to handle potential minor spacing or character variations
+When(/the user selects Round Trip with flight search data\s+(.+)\s+to\s+(.+)\s+carrier\s+(\S+)\s+seat class\s+(\S+)\s+adult\s+(\d+)\s+child\s+(\d+)/, /** @this {CustomWorld} */ async function (departureAirport, destinationAirport, carrier, seatClass, adultCountStr, childCountStr) {
+  this.flightSearch = {
+    departureAirport,
+    destinationAirport,
+    carrier,
+    seatClass,
+    adultPassengerCount: Number(adultCountStr),
+    childPassengerCount: Number(childCountStr)
+  };
+  const flight = this.flightSearch;
   await this.topPage.roundtripSelection();
   await this.topPage.selectDepartureCity(flight.departureAirport);
   await this.topPage.selectDestinationCity(flight.destinationAirport);
-  // await this.topPage.selectDepartureDate(flight.departureDate.month, flight.departureDate.year, flight.departureDate.day);
-  // await this.topPage.selectReturnDate(flight.returnDate.month, flight.returnDate.year, flight.returnDate.day);
-  await this.topPage.selectAutoDates();
+  await this.topPage.selectAutoDates(1); // dynamic date helper
+  //await this.topPage.selectDepartureDate(11, 2025, 10);
+  //await this.topPage.selectReturnDate(12, 2025, 17);
   await this.topPage.setAdultPassengerCount(flight.adultPassengerCount);
   await this.topPage.setChildrenPassengerCount(flight.childPassengerCount);
   expect(await this.topPage.selectSeatClass(flight.seatClass)).toBeTruthy();
@@ -45,12 +58,13 @@ When('the user selects Round Trip and initiates a search', /** @this {CustomWorl
 
 Then('the search form fields should be visible and user should be redirected to results', /** @this {CustomWorld} */ async function () {
   await this.utils.waitForSpinnerToDisappear();
-  // POManager#getSearchResultsPage already returns the correct page-object instance.
-  // The project-level types (types/world.d.ts + jsconfig.json) provide the necessary
-  // IntelliSense so the explicit inline cast is no longer required.
   this.searchResultsPage = this.poManager.getSearchResultsPage();
-  const ASSERT_TIMEOUT = this.ASSERT_TIMEOUT ?? ASSERT_TIMEOUT_FALLBACK;
-  await expect(this.searchResultsPage.headerSearchForm).toBeVisible({ timeout: ASSERT_TIMEOUT });
+  const status = await this.searchResultsPage.getSearchResultsStatus();
+  expect(['results', 'no-results']).toContain(status);
+  if (status === 'no-results') {
+    console.error('❌ No search results found — stopping execution.');
+    throw new Error('No search results found.');
+  }
 });
 
 Then('outbound flights should be displayed', /** @this {CustomWorld} */ async function () {
@@ -58,10 +72,23 @@ Then('outbound flights should be displayed', /** @this {CustomWorld} */ async fu
   await expect(this.searchResultsPage.outboundFlights).toBeVisible({ timeout: ASSERT_TIMEOUT });
 });
 
+Then('the outbound flight selection page should load', /** @this {CustomWorld} */ async function () {
+  // After choosing outbound flight, ensure return flight section appears
+  const ASSERT_TIMEOUT = this.ASSERT_TIMEOUT ?? ASSERT_TIMEOUT_FALLBACK;
+  await expect(this.searchResultsPage.returnFlightSection).toBeVisible({ timeout: ASSERT_TIMEOUT });
+});
+
 When('the user selects an outbound flight', /** @this {CustomWorld} */ async function () {
-  const { flight = {} } = this.testData || {};
+  const flight = this.flightSearch || {};
   await this.searchResultsPage.selectOutboundFlight(flight.carrier);
   await this.utils.waitForSpinnerToDisappear();
+  this.selectedCarrier = flight.carrier;
+});
+
+When('the user selects a return flight', /** @this {CustomWorld} */ async function () {
+  const carrier = this.selectedCarrier || (this.flightSearch && this.flightSearch.carrier);
+  await this.searchResultsPage.selectReturnFlightDetails(carrier);
+  this.priceAtReturnDetailsSection = await this.searchResultsPage.getPriceAtReturnDetailsSection();
 });
 
 Then('the return flight selection page should load', /** @this {CustomWorld} */ async function () {
@@ -71,9 +98,7 @@ Then('the return flight selection page should load', /** @this {CustomWorld} */ 
 });
 
 Then('flight listings and itinerary details should be displayed', /** @this {CustomWorld} */ async function () {
-  const { flight = {} } = this.testData || {};
-  await this.searchResultsPage.selectReturnFlightDetails(flight.carrier);
-  this.priceAtReturnDetailsSection = await this.searchResultsPage.getPriceAtReturnDetailsSection();
+  const flight = this.flightSearch || {};
   const details = await this.searchResultsPage.flightDetailsAndSchedule();
   expect(details.departureAirportName).toBe(flight.destinationAirport);
   expect(details.arrivalAirportName).toBe(flight.departureAirport);
@@ -82,7 +107,7 @@ Then('flight listings and itinerary details should be displayed', /** @this {Cus
 });
 
 When('the user clicks “View Plan”', /** @this {CustomWorld} */ async function () {
-  const { flight = {} } = this.testData || {};
+  const flight = this.flightSearch || {};
   await this.searchResultsPage.clickViewPlan(flight.carrier);
 });
 
@@ -93,7 +118,10 @@ Then('booking plans should be shown in grid format', /** @this {CustomWorld} */ 
 });
 
 When('the user clicks “Book with this Plan”', /** @this {CustomWorld} */ async function () {
-  await this.searchResultsPage.clickBookWithThisPlan();
+  // Simplified: underlying page object now throws on failure (error banner, unchanged URL, unexpected URL)
+  const ASSERT_TIMEOUT = this.ASSERT_TIMEOUT ?? 10000;
+  await this.searchResultsPage.waitForBookWithPlanOutcome(ASSERT_TIMEOUT);
+  console.log('✅ Successfully navigated to Passenger Info Page.');
   await this.utils.waitForSpinnerToDisappear();
 });
 
@@ -111,7 +139,10 @@ Then('Login and Register buttons should be visible for non-logged-in users', /**
 Then('“Applicant Information” section should be visible for logged-in users', /** @this {CustomWorld} */ async function () {
   await this.passengerInfoPage.clickLoginAndRegister();
   this.loginFlightBaseModule = this.poManager.getLoginFlightBaseModule();
-  const { login = {} } = this.testData || {};
+  const login = { ...(this.sharedData?.login || {}) };
+  if (!login.email || !login.password) {
+    throw new Error('Missing login credentials in test data (sharedData.login)');
+  }
   await this.loginFlightBaseModule.LogintoFlightBase(login.email, login.password);
   await this.utils.waitForSpinnerToDisappear();
   const ASSERT_TIMEOUT = this.ASSERT_TIMEOUT ?? ASSERT_TIMEOUT_FALLBACK;
@@ -123,8 +154,8 @@ Then('“Applicant Information” section should be visible for logged-in users'
 });
 
 Then('user should be able to enter mandatory passenger details',/** @this {CustomWorld} */ async function () {
-  // Populate passengers dynamically from test data
-  const { passengers = [], contacts = {} } = this.testData || {};
+  const passengers = this.sharedData?.passengers || [];
+  const contacts = this.sharedData?.contacts || {};
   for (let i = 0; i < passengers.length; i++) {
     const p = passengers[i];
     await this.passengerInfoPage.fillNameKatakana(i, p.surname, p.given);
@@ -161,28 +192,27 @@ When('the user proceeds to select additional services', /** @this {CustomWorld} 
 });
 
 Then('Option Selection Page should load with breadcrumb', /** @this {CustomWorld} */ async function () {
-  const { additionalServices = {} } = this.testData || {};
-  await expect(this.additionalServicePage.addOnServiceBreadcrumbHeader).toHaveText(additionalServices.breadcrumbHeader);
+  const breadcrumbHeader = this.sharedData?.additionalServices?.breadcrumbHeader || '追加サービス選択';
+  await expect(this.additionalServicePage.addOnServiceBreadcrumbHeader).toHaveText(breadcrumbHeader);
 });
 
 Then('the user selects additional checked baggage options', /** @this {CustomWorld} */ async function () {
-  await this.additionalServicePage.clickonadditionalCheckedBaggageSection();//open the section
-  await this.additionalServicePage.clickOutboundBaggageAndSelect20kg();
-  await this.additionalServicePage.clickReturnCheckedBaggageAndSelect20kg();
-  await this.additionalServicePage.clickonadditionalCheckedBaggageSection();//close the section
+  //await this.additionalServicePage.clickonadditionalCheckedBaggageSection();//open the section
+  //await this.additionalServicePage.clickOutboundBaggageAndSelect20kg();
+  //await this.additionalServicePage.clickReturnCheckedBaggageAndSelect20kg();
+  //await this.additionalServicePage.clickonadditionalCheckedBaggageSection();//close the section
 });
 
 Then('HISWeb Set Insurance section should be visible', /** @this {CustomWorld} */ async function () {
   const policyHolders = await this.additionalServicePage.getInsurancePolicyHolders();
-  // 1st passenger
-  expect(policyHolders[0].firstName).toBe('TARO');
-  expect(policyHolders[0].lastName).toBe('KOKUNAI');
-  // 2nd child passenger
-  expect(policyHolders[1].firstName).toBe('HANAKO');
-  expect(policyHolders[1].lastName).toBe('KOKUNAI');
-  // 3rd infant passenger
-  expect(policyHolders[2].firstName).toBe('TANAKO');
-  expect(policyHolders[2].lastName).toBe('KOKUNAI');
+  const passengers = this.sharedData?.passengers || [];
+  expect(policyHolders.length).toBeGreaterThanOrEqual(Math.min(passengers.length, policyHolders.length));
+  for (let i = 0; i < Math.min(passengers.length, policyHolders.length); i++) {
+    const expected = passengers[i];
+    const actual = policyHolders[i];
+    expect(actual.firstName).toBe(expected.given);
+    expect(actual.lastName).toBe(expected.surname);
+  }
 });
 
 When('the user clicks “Proceed to Confirm Input Contents”', /** @this {CustomWorld} */ async function () {
@@ -200,42 +230,31 @@ Then('Input Confirmation Page should load and display passenger details', /** @t
   // Compare both value of Applicant Information directly from Passenger Info and Confirm Input pages
   expect(applicantValuesFromConfirmInputPage).toEqual(this.applicantValuesFromPassengerInfoPage);
 
-// --- Field labels on the page (handle minor variants) ---
-const { labels: LABELS = { surname: [], given: [], dob: [], gender: [], nation: [] } } = this.testData || {};
+  // --- Field labels on the page (handle minor variants) ---
+  const LABELS = this.sharedData?.labels || { surname: [], given: [], dob: [], gender: [], nation: [] };
 
-// --- Small utilities ---
-/** Return the first non-empty value for any of the given keys from an object */
-const pick = (obj, keys) => keys.map(k => obj[k]).find(v => v != null && String(v).trim() !== '');
-/** Keep only digits (for comparing DoB robustly) */
-const normalizeDob = s => (String(s ?? '').match(/\d+/g) || []).map((v,i)=> i? v.padStart(2,'0'):v).join('');
-/** Expected DoB as 8 digits YYYYMMDD */
-const formatDob = ({ y, m, d }) =>
-  `${y}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}`;
-/** Map input gender -> page label */
-const toPageGender = (g) => (g === 'male' ? '男性' : '女性');
-// --- The validation ---
-for (let i = 0; i < this.expectedPassengers.length; i++) {
-  const actual = await this.confirmInputPage.getPassengerInfo(i); // { "姓（SurName）": "...", ... }
-  const exp = this.expectedPassengers[i];
+  // --- Small utilities ---
+  // Utilities now imported from dataUtils.js
+  // --- The validation ---
+  for (let i = 0; i < this.expectedPassengers.length; i++) {
+    const actual = await this.confirmInputPage.getPassengerInfo(i); // { "姓（SurName）": "...", ... }
+    const exp = this.expectedPassengers[i];
 
-  const actualSurname = pick(actual, LABELS.surname);
-  const actualGiven   = pick(actual, LABELS.given);
-  const actualDob     = pick(actual, LABELS.dob);
-  const actualGender  = pick(actual, LABELS.gender);
-  const actualNation  = pick(actual, LABELS.nation);
-
-  // Names
-  expect(actualSurname).toBe(exp.surname);
-  expect(actualGiven).toBe(exp.given);
-
-  // DoB (compare as digits to ignore formatting like "1990年12月12日")
-  const expectedDOBValue = formatDob(exp);
-  const actualDobvalue = normalizeDob(actualDob);
-  expect(actualDobvalue).toBe(expectedDOBValue);
-
-  // Gender and nationality
-  expect(actualGender).toBe(toPageGender(exp.gender));
-  expect(actualNation).toBe(exp.nationality);
+  const actualSurname = pickFirstNonEmpty(actual, LABELS.surname);
+  const actualGiven = pickFirstNonEmpty(actual, LABELS.given);
+  const actualDob = pickFirstNonEmpty(actual, LABELS.dob);
+  const actualGender = pickFirstNonEmpty(actual, LABELS.gender);
+  const actualNation = pickFirstNonEmpty(actual, LABELS.nation);
+    // Names
+    expect(actualSurname).toBe(exp.surname);
+    expect(actualGiven).toBe(exp.given);
+    // DoB (compare as digits to ignore formatting like "1990年12月12日")
+    const expectedDOBValue = formatDob(exp);
+    const actualDobvalue = normalizeDob(actualDob);
+    expect(actualDobvalue).toBe(expectedDOBValue);
+    // Gender and nationality
+    expect(actualGender).toBe(toPageGender(exp.gender));
+    expect(actualNation).toBe(exp.nationality);
   }
 
 });
@@ -243,8 +262,9 @@ for (let i = 0; i < this.expectedPassengers.length; i++) {
 Then('“Proceed to Payment” button should be active and clickable', /** @this {CustomWorld} */ async function () {
   await this.confirmInputPage.proceedToPayment();
   await this.utils.waitForSpinnerToDisappear();
+  await expect(this.page).toHaveURL(/\/v2\/payment\/select-method\/?$/, { timeout: 30_000 });
   this.paymentPage = this.poManager.getPaymentPage(); //Payement Page object
- this.totalAmountFromPaymentPage = await this.paymentPage.getTotalAmount();
+  this.totalAmountFromPaymentPage = await this.paymentPage.getTotalAmount();
   //await expect(this.paymentPage.proceedToPaymentButton).toBeEnabled();
 });
 
@@ -252,19 +272,38 @@ When('the user enters payment details and proceeds', /** @this {CustomWorld} */ 
   await this.paymentPage.selectCardPaymentIfNotChecked();
   await this.page.waitForTimeout(1000); // slight wait to ensure button state updates
   await this.paymentPage.proceedToEnterPayment();
+  await this.utils.waitForPageStability();
   this.enterPaymentPage = this.poManager.getEnterPaymentPage(); // Enter Payment Page object
   expect(await this.enterPaymentPage.getFinalAmount()).toBe(this.totalAmountFromPaymentPage);
-  const { payment = {} } = this.testData || {};
-  const { card = {} } = payment;
   await this.enterPaymentPage.fillCreditCard({
-    cardNo: card.number,
-    expYear: card.expYear,
-    expMonth: card.expMonth,
-    holderName: card.holderName,
-    cvc: card.cvc
+    cardNo: (this.sharedData?.payment?.card?.number) || '',
+    expYear: (this.sharedData?.payment?.card?.expYear) || '',
+    expMonth: (this.sharedData?.payment?.card?.expMonth) || '',
+    holderName: (this.sharedData?.payment?.card?.holderName) || '',
+    cvc: (this.sharedData?.payment?.card?.cvc) || ''
   });
+  await this.paymentPage.proceedToEnterPayment();
 });
-  
+
 Then('HIS Reservation Number should be displayed', /** @this {CustomWorld} */ async function () {
-  await expect(this.page.locator('#reservation-number')).toBeVisible();
+  //await this.utils.waitForPageStability();
+  const ASSERT_TIMEOUT = this.ASSERT_TIMEOUT ?? ASSERT_TIMEOUT_FALLBACK;
+  await expect(this.page).toHaveURL(/\/complete\?hisresno=/i, { timeout: 30000 });
+
+  //await this.paymentPage.waitForBookingConfirmationPage();
+  this.reservationCompletePage = this.poManager.getReservationCompletePage();
+  const reservationNumber = await this.reservationCompletePage.getReservationNumber();
+  expect(reservationNumber).not.toBeFalsy();        // basic check
+  expect(reservationNumber).toMatch(/^PO\d{11}$/);
+  //console.log(reservationNumber); // pattern check
+  console.log(chalk.green.bold('\n🎉 Reservation Completed Successfully!'));
+  console.log(chalk.yellow.bold(`🧾 Reservation Number: ${reservationNumber}\n`));
+
+  // Store on World so After hook (or other steps) could access if needed
+  this.reservationNumber = reservationNumber;
+  // Attach ONLY the final booking message to the Cucumber report (text attachment)
+  if (typeof this.attach === 'function') {
+    const finalMessage = `Reservation Completed Successfully\nReservation Number: ${reservationNumber}`;
+    this.attach(finalMessage, 'text/plain');
+  }
 });

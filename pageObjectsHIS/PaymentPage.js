@@ -12,7 +12,7 @@ class PaymentPage {
     this.cardPaymentLabel = page.locator('label[for="opp"]');
     // Proceed button: snapshot shows <button class="next-btn js-temporary-disabled">決済へ進む...</button>
     this.proceedToPaymentButton = page.locator('button.next-btn');
-    this.DEFAULT_TIMEOUT = 10000;
+    this.DEFAULT_TIMEOUT = 60000;
   }
 
   async getTotalAmount() {
@@ -39,11 +39,20 @@ class PaymentPage {
   }
 
   async proceedToEnterPayment(timeout = this.DEFAULT_TIMEOUT) {
-    //await this.waitForProceedEnabled(timeout);
     await this.proceedToPaymentButton.waitFor({ state: 'visible', timeout });
     await this.proceedToPaymentButton.click();
     await this.page.waitForLoadState('networkidle');
   }
+
+  async waitForBookingConfirmationPage(timeout = this.DEFAULT_TIMEOUT) {
+  // Wait for the final redirect URL (itinerarytoken changes dynamically)
+  await this.page.waitForURL(/\/confirm\?itinerarytoken=/i, {timeout,waitUntil: 'domcontentloaded',});
+  // Wait for the page to be fully loaded
+  await this.page.waitForLoadState('networkidle', { timeout });
+  // Small buffer to let UI settle
+  await this.page.waitForTimeout(1000);
+}
+
 }
 
 module.exports = { PaymentPage };

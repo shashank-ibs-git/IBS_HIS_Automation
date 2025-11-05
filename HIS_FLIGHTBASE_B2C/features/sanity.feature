@@ -1,13 +1,18 @@
 Feature: Flight BASE UI Sanity - End-to-End Flow
 
-  Scenario: User completes a flight booking journey successfully
+  # Scenario Outline drives only the flight (search) variations.
+  # Other data (login, passengers, payment) comes from shared testData/common dataset.
+
+  Scenario Outline: User completes a flight booking with varying search inputs
     Given the user launches the Flight BASE application
     Then the Top Page should display header, product tabs, and search form
     Then the “Flight” tab should be selected by default in Japanese
-    When the user selects Round Trip and initiates a search
+    When the user selects Round Trip with flight search data <departureAirport> to <destinationAirport> carrier <carrier> seat class <seatClass> adult <adultPassengerCount> child <childPassengerCount>
     Then the search form fields should be visible and user should be redirected to results
     Then outbound flights should be displayed
     When the user selects an outbound flight
+    Then the outbound flight selection page should load
+    When the user selects a return flight
     Then the return flight selection page should load
     Then flight listings and itinerary details should be displayed
     When the user clicks “View Plan”
@@ -26,3 +31,10 @@ Feature: Flight BASE UI Sanity - End-to-End Flow
     Then “Proceed to Payment” button should be active and clickable
     When the user enters payment details and proceeds
     Then HIS Reservation Number should be displayed
+
+    Examples:
+      | departureAirport | destinationAirport   | carrier | seatClass | adultPassengerCount | childPassengerCount |
+      | 成田国際空港      | ブリスベン空港       | JQ      | ECONOMY  | 1                   | 1                  |
+      | 東京国際空港     | ロサンゼルス国際空港 | 1A      | ECONOMY   | 1                   | 1                   |
+
+

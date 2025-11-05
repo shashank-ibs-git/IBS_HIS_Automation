@@ -5,7 +5,9 @@ class ConfirmInputPage {
     this.policyHolderNames = page.locator("span.p-set-insurance-card__policyholder-name");
     this.applicantInformationTable = page.locator("//h2[text()='申込者情報']//parent::div/following-sibling::div//table/tbody");
     this.passengerInformationRows = (index) => this.page.locator(`(//div[contains(@class,'p-reserve-info__contents-item')])[${index + 1}]`);
-    this.proceedToPaymentButton = page.locator(".p-reserve-confirm button[class*= 'c-rounded-button']");
+    this.proceedToPaymentButton =  page.getByRole('button', { name: 'お支払いに進む' });
+    this.errorAfterProceedToPayment = page.locator("//p[contains(@class,'c-input__error')]").first();
+    this.DEFAULT_TIMEOUT = 30000;
   }
 async getApplicantInformation() {
   // Locate the applicant information table
@@ -49,9 +51,16 @@ async getPassengerInfo(index) {
   return Object.fromEntries(entries);
 }
 
-async proceedToPayment() {
+async proceedToPayment(timeout = this.DEFAULT_TIMEOUT, pauseMs = 1000) {
+  await this.proceedToPaymentButton.waitFor({ state: 'visible', timeout });
+  await this.proceedToPaymentButton.click({ trial: true });
   await this.proceedToPaymentButton.click(); 
-  await this.page.waitForLoadState('networkidle');
+  
+  if (await this.errorAfterProceedToPayment.isVisible()) {
+    const errorMessage = await this.errorAfterProceedToPayment.innerText();
+    throw new Error(`Error after proceeding to payment: ${errorMessage}`);
+  }
+
 
 }
 }

@@ -1,4 +1,14 @@
-// cucumber.js — configuration for HIS_FLIGHTBASE_B2C project
+module.exports = {
+  default: {
+    paths: [
+      'HIS_FLIGHTBASE_B2C/features/**/*.feature'
+    ],
+    publishQuiet: true,
+    format: [
+      'progress'
+    ]
+  }
+};// cucumber.js — configuration for HIS_FLIGHTBASE_B2C project
 module.exports = {
   default: {
     // Path to your .feature files

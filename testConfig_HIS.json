@@ -6,5 +6,9 @@
     "stage": "https://stg-overseas-air.his-j.com/",
     "prod": "https://testerbud.com"
   },
-  "headless": false
+  "headless": false,
+  "login": {
+    "email": "Enter_Your_Email_Here",
+    "password": "Enter_Your_Password_Here"
+  }
 }

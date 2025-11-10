@@ -100,6 +100,13 @@ Before(async function () {
   this.baseUrl     = BASE_URL;
   // Load shared test data from single testData.json file
   this.sharedData = loadTestData();
+  // Override login credentials from testConfig_HIS.json if present (environment-specific user customization)
+  if (cfg.login && cfg.login.email && cfg.login.password) {
+    this.sharedData.login = { email: cfg.login.email, password: cfg.login.password };
+  } else if (process.env.HIS_LOGIN_EMAIL && process.env.HIS_LOGIN_PASSWORD) {
+    // Fallback to environment variables if config login not provided
+    this.sharedData.login = { email: process.env.HIS_LOGIN_EMAIL, password: process.env.HIS_LOGIN_PASSWORD };
+  }
   // Centralized ASSERT_TIMEOUT (allow override via testData.json assertTimeout field)
   this.ASSERT_TIMEOUT = (this.sharedData && typeof this.sharedData.assertTimeout === 'number') ? this.sharedData.assertTimeout : 10000;
 
@@ -166,9 +173,41 @@ AfterStep(async function ({ result, pickleStep }) {
   }
 });
 
-After(async function () {
-  if (this.page) await this.page.close();
-  if (this.context) await this.context.close();
+// Scenario-level fallback screenshot (in case a failure occurs outside a step or AfterStep did not run)
+After(async function (scenario) {
+  try {
+    if (scenario.result && scenario.result.status === Status.FAILED && this.page) {
+      const dir = path.resolve(process.cwd(), 'screenshots');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const safeScenario = (scenario.pickle && scenario.pickle.name ? scenario.pickle.name : 'scenario')
+        .replace(/[^a-z0-9-_]/gi, '_')
+        .slice(0, 60);
+      const ts = new Date().toISOString().replace(/T/, '_').replace(/:/g, '-').replace(/\..+/, '');
+      const filePath = path.join(dir, `scenario-failure-${safeScenario}-${ts}.png`);
+      const buf = await this.page.screenshot({ path: filePath, fullPage: true });
+      if (typeof this.attach === 'function') {
+        this.attach(buf, 'image/png');
+      }
+      // Optional HTML snapshot on scenario failure (same logic as AfterStep)
+      try {
+        const html = await this.page.content();
+        const htmlPath = path.join(dir, `scenario-failure-${safeScenario}-${ts}.html`);
+        fs.writeFileSync(htmlPath, html);
+        if (process.env.ATTACH_HTML === '1' && typeof this.attach === 'function') {
+          const MAX_ATTACH = 500_000;
+          const attachHtml = html.length > MAX_ATTACH ? html.slice(0, MAX_ATTACH) + '\n<!-- truncated -->' : html;
+          this.attach(attachHtml, 'text/html');
+        }
+      } catch (e) {
+        console.error('Scenario failure HTML save error:', e.message || e);
+      }
+    }
+  } catch (e) {
+    console.error('Error during failure screenshot fallback:', e.message || e);
+  } finally {
+    if (this.page) await this.page.close();
+    if (this.context) await this.context.close();
+  }
 });
 
 AfterAll(async function () {

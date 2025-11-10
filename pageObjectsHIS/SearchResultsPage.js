@@ -86,40 +86,54 @@ async getSearchResultsStatus(timeout = this.DEFAULT_TIMEOUT) {
   return await planTables.count();
 }
 
-async waitForBookWithPlanOutcome(timeoutMs = 10000) {
+async waitForBookWithPlanOutcome(timeoutMs = 15000, maxRetries = 2) {
   const initialUrl = this.page.url();
   const SUCCESS_URL_REGEX = /\/input$/i; // success must end with /input
-  await this.bookWithThisPlanBtn.click();
-  await this.waitForSpinnerToDisappear().catch(() => {});
-
   const pollInterval = 250; // ms
-  const deadline = Date.now() + timeoutMs;
   const banner = this.flightDetailsUnavailableLocator;
 
-  while (Date.now() < deadline) {
-    // Success URL detected
-    if (SUCCESS_URL_REGEX.test(this.page.url())) return 'success';
-    // Error banner detected early
-    if (await banner.isVisible()) {
-      let msg = '';
-      try { msg = (await banner.innerText())?.trim(); } catch { /* ignore */ }
-      throw new Error(`Flight booking failed (error banner): ${msg || 'Unknown error'} : Flight details are currently unavailable.`);
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    // Choose plan button by attempt index (first attempt -> first plan, second attempt -> second plan, etc.)
+    const planButtons = this.page.getByRole('button', { name: 'このプランで予約' });
+    const btnCount = await planButtons.count();
+    const targetBtn = attempt < btnCount ? planButtons.nth(attempt) : planButtons.first();
+
+    await targetBtn.click();
+    await this.waitForSpinnerToDisappear().catch(() => {});
+
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (SUCCESS_URL_REGEX.test(this.page.url())) return 'success';
+      if (await banner.isVisible()) {
+        let msg = '';
+        try { msg = (await banner.innerText())?.trim(); } catch { /* ignore */ }
+        // If we have remaining retries, break out to retry another plan.
+        if (attempt + 1 < maxRetries) {
+          // Small pause before retrying
+          await this.page.waitForTimeout(500);
+          break; // proceed to next attempt
+        }
+        throw new Error(`Flight booking failed after ${attempt + 1} attempt(s) (error banner): ${msg || 'Unknown error'} : Flight details are currently unavailable.`);
+      }
+      await this.page.waitForTimeout(pollInterval);
     }
-    await this.page.waitForTimeout(pollInterval);
+
+    // Post-loop success check before next attempt
+    if (SUCCESS_URL_REGEX.test(this.page.url())) return 'success';
   }
 
-  // Final checks after timeout window
+  // Final evaluation after retries exhausted
   if (SUCCESS_URL_REGEX.test(this.page.url())) return 'success';
   if (await banner.isVisible()) {
     let msg = '';
     try { msg = (await banner.innerText())?.trim(); } catch { /* ignore */ }
-      throw new Error(`Flight booking failed (error banner): ${msg || 'Unknown error'} : Flight details are currently unavailable.`);
+    throw new Error(`Flight booking failed (final) (error banner): ${msg || 'Unknown error'} : Flight details are currently unavailable.`);
   }
   const current = this.page.url();
   if (current !== initialUrl) {
     throw new Error(`Flight booking failed: navigated to unexpected URL ${current}`);
   }
-  throw new Error('Flight booking failed: no success URL and no error banner within timeout');
+  throw new Error('Flight booking failed: no success URL, no error banner within timeout after retries');
 }
 
   // Localized spinner wait (decoupled from external Utilities injection)

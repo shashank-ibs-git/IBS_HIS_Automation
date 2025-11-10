@@ -11,10 +11,7 @@
     "seatClass": "ECONOMY",
     "flightTabLabel": "航空券"
   },
-  "login": {
-    "email": "shashank.channegowda@ibsplc.com",
-    "password": "TestingIBS123!"
-  },
+  "_loginNote": "Login credentials now come from testConfig_HIS.json (login.email/password) or HIS_LOGIN_EMAIL/HIS_LOGIN_PASSWORD env vars.",
   "passengers": [
     { "type": "adult",  "surname": "KOKUNAI", "given": "TARO",   "y": "1990", "m": "12", "d": "12", "gender": "male",   "nationality": "アンギラ" },
     { "type": "child",  "surname": "KOKUNAI", "given": "HANAKO", "y": "2021", "m": "12", "d": "12", "gender": "female", "nationality": "アンギラ" },

@@ -1,6 +1,6 @@
 # IBS HIS Automation – Playwright + Cucumber
 
-End-to-end flight booking sanity tests using Playwright and Cucumber (BDD) with a Page Object Model. Reporting uses the official `@cucumber/html-formatter` CLI via wrapper scripts.
+End-to-end flight booking sanity tests using Playwright and Cucumber (BDD) with a Page Object Model. Reporting now uses `cucumber-html-reporter` fed by the Cucumber JSON formatter (the previous `@cucumber/html-formatter` CLI dependency has been removed).
 
 ---
 ## 1. Prerequisites
@@ -74,11 +74,11 @@ npx cucumber-js HIS_FLIGHTBASE_B2C/features/sanity.feature --require HIS_FLIGHTB
 ```
 
 ## 7. Reporting Flow (Wrapper Scripts)
-1. Execute Cucumber with `--format message:reports/cucumber-messages.ndjson` plus progress.
-2. On completion, run `npx @cucumber/html-formatter --output reports/cucumber-report.html reports/cucumber-messages.ndjson`.
-3. Wrapper validates existence & non-zero size; warns if empty.
+1. Execute Cucumber with `--format json:reports/cucumber-report.json` plus progress (sequential or parallel).
+2. Wrapper script invokes `cucumber-html-reporter` programmatically to build `reports/cucumber-report.html`.
+3. Size check logs a warning if the HTML file is empty.
 
-Why this approach? It avoids previous in-process formatter API mismatches (e.g., `formatter.finished` errors) by using the stable CLI.
+Why this approach? Simpler dependency surface (no standalone CLI), integrates cleanly with Node API, and allows richer metadata injection.
 
 ## 8. Debugging Failures
 Artifacts:
@@ -141,7 +141,7 @@ Parallel CI can mirror `npm run test:parallel`; ensure runner OS has sufficient 
 | Item | Status | Replacement |
 |------|--------|------------|
 | `run-datasets.js` | Not invoked | Future enhancement if multi-variant runs return |
-| `generate-cucumber-report.js` & merge scripts | Removed | Messages → CLI html-formatter pipeline |
+| `@cucumber/html-formatter` CLI phase | Removed | JSON formatter + cucumber-html-reporter |
 | Env login overrides | Removed | Static credentials from `testData.json` (`sharedData.login`) |
 
 ## 13. Next Potential Enhancements

@@ -1,6 +1,5 @@
 const { Given, When, Then } = require('@cucumber/cucumber');
 const { expect } = require('@playwright/test');
-const { default: chalk } = require('chalk');
 const { pickFirstNonEmpty, normalizeDob, formatDob, toPageGender } = require('../support/dataUtils');
 // Data source simplified: all dynamic flight search values come from Scenario Outline Examples.
 // Other required data (login, passengers, payment, labels) are now static inline constants.
@@ -32,24 +31,27 @@ Then('the “Flight” tab should be selected by default in Japanese', /** @this
 });
 
 // More tolerant regex step to handle potential minor spacing or character variations
-When(/the user selects Round Trip with flight search data\s+(.+)\s+to\s+(.+)\s+carrier\s+(\S+)\s+seat class\s+(\S+)\s+adult\s+(\d+)\s+child\s+(\d+)/, /** @this {CustomWorld} */ async function (departureAirport, destinationAirport, carrier, seatClass, adultCountStr, childCountStr) {
+When(/the user selects Round Trip with flight search data\s+(.+)\s+to\s+(.+)\s+carrier\s+(\S+)\s+seat class\s+(\S+)\s+adult\s+(\d+)\s+child\s+(\d+)\s+infant\s+(\d+)/, /** @this {CustomWorld} */ async function (departureAirport, destinationAirport, carrier, seatClass, adultCountStr, childCountStr, infantCountStr) {
   this.flightSearch = {
     departureAirport,
     destinationAirport,
     carrier,
     seatClass,
     adultPassengerCount: Number(adultCountStr),
-    childPassengerCount: Number(childCountStr)
+    childPassengerCount: Number(childCountStr),
+    infantPassengerCount: Number(infantCountStr)
   };
   const flight = this.flightSearch;
   await this.topPage.roundtripSelection();
   await this.topPage.selectDepartureCity(flight.departureAirport);
   await this.topPage.selectDestinationCity(flight.destinationAirport);
-  await this.topPage.selectAutoDates(1); // dynamic date helper
-  //await this.topPage.selectDepartureDate(11, 2025, 10);
-  //await this.topPage.selectReturnDate(12, 2025, 17);
+  //await this.topPage.selectAutoDates(1); // dynamic date helper
+  await this.topPage.selectDepartureDate(11, 2025, 20);
+  await this.topPage.selectReturnDate(12, 2025, 5);
+  await this.topPage.clickPassengerSelection();
   await this.topPage.setAdultPassengerCount(flight.adultPassengerCount);
   await this.topPage.setChildrenPassengerCount(flight.childPassengerCount);
+  await this.topPage.setInfantPassengerCount(flight.infantPassengerCount);
   expect(await this.topPage.selectSeatClass(flight.seatClass)).toBeTruthy();
   await this.topPage.confirmPassengerSelection();
   await this.topPage.searchButton.click();
@@ -154,34 +156,10 @@ Then('“Applicant Information” section should be visible for logged-in users'
 });
 
 Then('user should be able to enter mandatory passenger details',/** @this {CustomWorld} */ async function () {
-  const passengers = this.sharedData?.passengers || [];
+  const passengers = (this.sharedData?.passengers || []).slice();
   const contacts = this.sharedData?.contacts || {};
-  for (let i = 0; i < passengers.length; i++) {
-    const p = passengers[i];
-    await this.passengerInfoPage.fillNameKatakana(i, p.surname, p.given);
-    await this.passengerInfoPage.fillBirthDate(i, p.y, p.m, p.d);
-    await this.passengerInfoPage.selectGender(String(i), p.gender);
-    await this.passengerInfoPage.selectNationality(String(i), p.nationality);
-  }
-  this.expectedPassengers = passengers.map(p => ({
-    surname: p.surname,
-    given: p.given,
-    y: p.y,
-    m: p.m,
-    d: p.d,
-    gender: p.gender,
-    nationality: p.nationality
-  }));
-  if (contacts.phone) await this.passengerInfoPage.fillPhoneContact(contacts.phone);
-  if (contacts.domestic) {
-    await this.passengerInfoPage.fillDomesticContactInformation(
-      contacts.domestic.nameKana,
-      contacts.domestic.phone,
-      contacts.domestic.relationship
-    );
-  }
+  this.expectedPassengers = await this.passengerInfoPage.fillAllPassengers(passengers, contacts, this.flightSearch || {});
   await this.passengerInfoPage.proceedToAddOns();
-
 });
 
 When('the user proceeds to select additional services', /** @this {CustomWorld} */ async function () {
@@ -204,14 +182,33 @@ Then('the user selects additional checked baggage options', /** @this {CustomWor
 });
 
 Then('HISWeb Set Insurance section should be visible', /** @this {CustomWorld} */ async function () {
+  // Fetch insurance policy holders from the page.
   const policyHolders = await this.additionalServicePage.getInsurancePolicyHolders();
-  const passengers = this.sharedData?.passengers || [];
-  expect(policyHolders.length).toBeGreaterThanOrEqual(Math.min(passengers.length, policyHolders.length));
-  for (let i = 0; i < Math.min(passengers.length, policyHolders.length); i++) {
-    const expected = passengers[i];
-    const actual = policyHolders[i];
-    expect(actual.firstName).toBe(expected.given);
-    expect(actual.lastName).toBe(expected.surname);
+  // Passengers we actually filled earlier.
+  const filledPassengers = Array.isArray(this.expectedPassengers) ? this.expectedPassengers.slice() : [];
+
+  if (filledPassengers.length === 0) {
+    console.warn('⚠ No passengers recorded as filled; skipping insurance validation.');
+    return;
+  }
+  // Simple helper: remove spaces and make uppercase for reliable matching.
+  const norm = (s) => (s || '').replace(/\s+/g, '').toUpperCase();
+  // Build a plain array of holder name keys: SURNAME|GIVEN
+  const holderKeys = policyHolders.map(h => `${norm(h.lastName)}|${norm(h.firstName)}`);
+  // We expect every filled passenger (adult, child, infant) to appear.
+  // Create expected keys in the same format.
+  const expectedKeys = filledPassengers.map(p => `${norm(p.surname)}|${norm(p.given)}`);
+  // Quick length sanity: there should be at least as many insurance entries as passengers.
+  expect(holderKeys.length).toBeGreaterThanOrEqual(expectedKeys.length);
+  // Check each passenger is present.
+  for (const key of expectedKeys) {
+    expect(holderKeys.includes(key), `Missing insurance entry for passenger ${key.replace('|',' ')}`).toBeTruthy();
+  }
+
+  // If there are extra insurance entries, just log them (not a failure).
+  const extras = holderKeys.filter(k => !expectedKeys.includes(k));
+  if (extras.length) {
+    console.info(`ℹ Extra insurance entries not in passenger list: ${extras.join(', ')}`);
   }
 });
 
@@ -236,33 +233,52 @@ Then('Input Confirmation Page should load and display passenger details', /** @t
   // --- Small utilities ---
   // Utilities now imported from dataUtils.js
   // --- The validation ---
+  // --- Passenger detail verification ---
+  // Ensure we have an expected snapshot first
+  expect(Array.isArray(this.expectedPassengers) && this.expectedPassengers.length > 0, 'No expectedPassengers snapshot found from fillAllPassengers').toBeTruthy();
+
+  // Verify each passenger block on Confirm Input matches the expected order & transformed fields
   for (let i = 0; i < this.expectedPassengers.length; i++) {
-    const actual = await this.confirmInputPage.getPassengerInfo(i); // { "姓（SurName）": "...", ... }
+    const actual = await this.confirmInputPage.getPassengerInfo(i);
     const exp = this.expectedPassengers[i];
 
-  const actualSurname = pickFirstNonEmpty(actual, LABELS.surname);
-  const actualGiven = pickFirstNonEmpty(actual, LABELS.given);
-  const actualDob = pickFirstNonEmpty(actual, LABELS.dob);
-  const actualGender = pickFirstNonEmpty(actual, LABELS.gender);
-  const actualNation = pickFirstNonEmpty(actual, LABELS.nation);
-    // Names
+    const actualSurname = pickFirstNonEmpty(actual, LABELS.surname);
+    const actualGiven = pickFirstNonEmpty(actual, LABELS.given);
+    const actualDob = pickFirstNonEmpty(actual, LABELS.dob);
+    const actualGender = pickFirstNonEmpty(actual, LABELS.gender);
+    const actualNation = pickFirstNonEmpty(actual, LABELS.nation);
+
+    // Basic presence assertions for novice clarity
+    expect(actualSurname, `Missing surname field for passenger index ${i}`).toBeTruthy();
+    expect(actualGiven, `Missing given name field for passenger index ${i}`).toBeTruthy();
+    expect(actualDob, `Missing DOB field for passenger index ${i}`).toBeTruthy();
+    expect(actualGender, `Missing gender field for passenger index ${i}`).toBeTruthy();
+    expect(actualNation, `Missing nationality field for passenger index ${i}`).toBeTruthy();
+
+    // Names (exact match)
     expect(actualSurname).toBe(exp.surname);
     expect(actualGiven).toBe(exp.given);
-    // DoB (compare as digits to ignore formatting like "1990年12月12日")
+
+    // DOB (normalized digit comparison)
     const expectedDOBValue = formatDob(exp);
     const actualDobvalue = normalizeDob(actualDob);
     expect(actualDobvalue).toBe(expectedDOBValue);
-    // Gender and nationality
+
+    // Gender & nationality
     expect(actualGender).toBe(toPageGender(exp.gender));
     expect(actualNation).toBe(exp.nationality);
   }
+
+  // Type distribution sanity check (counts per type)
+  const typeCounts = this.expectedPassengers.reduce((acc,p)=>{acc[p.type]=(acc[p.type]||0)+1;return acc;},{});
+  console.log('🔍 Confirmed passenger type counts:', typeCounts);
 
 });
 
 Then('“Proceed to Payment” button should be active and clickable', /** @this {CustomWorld} */ async function () {
   await this.confirmInputPage.proceedToPayment();
   await this.utils.waitForSpinnerToDisappear();
-  await expect(this.page).toHaveURL(/\/v2\/payment\/select-method\/?$/, { timeout: 30_000 });
+  await expect(this.page).toHaveURL(/\/v2\/payment\/select-method\/?$/, { timeout: 30000 });
   this.paymentPage = this.poManager.getPaymentPage(); //Payement Page object
   this.totalAmountFromPaymentPage = await this.paymentPage.getTotalAmount();
   //await expect(this.paymentPage.proceedToPaymentButton).toBeEnabled();
@@ -295,9 +311,8 @@ Then('HIS Reservation Number should be displayed', /** @this {CustomWorld} */ as
   const reservationNumber = await this.reservationCompletePage.getReservationNumber();
   expect(reservationNumber).not.toBeFalsy();        // basic check
   expect(reservationNumber).toMatch(/^PO\d{11}$/);
-  //console.log(reservationNumber); // pattern check
-  console.log(chalk.green.bold('\n🎉 Reservation Completed Successfully!'));
-  console.log(chalk.yellow.bold(`🧾 Reservation Number: ${reservationNumber}\n`));
+  console.log('\n🎉 Reservation Completed Successfully!');
+  console.log(`🧾 Reservation Number: ${reservationNumber}\n`);
 
   // Store on World so After hook (or other steps) could access if needed
   this.reservationNumber = reservationNumber;

@@ -7,7 +7,7 @@ Feature: Flight BASE UI Sanity - End-to-End Flow
     Given the user launches the Flight BASE application
     Then the Top Page should display header, product tabs, and search form
     Then the “Flight” tab should be selected by default in Japanese
-    When the user selects Round Trip with flight search data <departureAirport> to <destinationAirport> carrier <carrier> seat class <seatClass> adult <adultPassengerCount> child <childPassengerCount>
+    When the user selects Round Trip with flight search data <departureAirport> to <destinationAirport> carrier <carrier> seat class <seatClass> adult <adultPassengerCount> child <childPassengerCount> infant <infantPassengerCount>
     Then the search form fields should be visible and user should be redirected to results
     Then outbound flights should be displayed
     When the user selects an outbound flight
@@ -33,8 +33,8 @@ Feature: Flight BASE UI Sanity - End-to-End Flow
     Then HIS Reservation Number should be displayed
 
     Examples:
-      | departureAirport | destinationAirport   | carrier | seatClass | adultPassengerCount | childPassengerCount |
-      | 成田国際空港      | ブリスベン空港       | JQ      | ECONOMY  | 1                   | 1                  |
-      | 東京国際空港     | ロサンゼルス国際空港 | 1A      | ECONOMY   | 1                   | 1                   |
+      | departureAirport | destinationAirport   | carrier | seatClass | adultPassengerCount | childPassengerCount | infantPassengerCount |
+      | 成田国際空港      | ブリスベン空港       | JQN     | ECONOMY  | 2                   | 2                  | 2                     |
+      | 東京国際空港     | ロサンゼルス国際空港 | 1A      | ECONOMY   | 2                   | 2                   | 2                     |
 
 

@@ -12,14 +12,10 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-  "@cucumber/cucumber": "^12.2.0",
-  "@cucumber/html-formatter": "^12.2.0",
+    "@cucumber/cucumber": "^12.2.0",
     "@playwright/test": "^1.56.1",
-    "cucumber-html-reporter": "^7.2.0",
+    "cucumber-html-reporter": "^6.0.0",
     "playwright": "^1.56.1",
     "source-map-support": "^0.5.21"
-  },
-  "dependencies": {
-    "chalk": "^5.6.2"
   }
 }

@@ -28,6 +28,9 @@ class PassengerInfoPage {
 
     // ==== Minor consent ====
     this.minorConsentCheckbox = (index) => page.locator(`label[for='parentconsent01_${index}']`);
+
+    // ==== Passenger heading blocks (dynamic classification) ====
+    this.passengerHeadingLocator = page.locator("//h5[contains(@class,'p-reserve-input-heading')]");
   }
 
   
@@ -132,6 +135,176 @@ async getApplicantInformation() {
   async proceedToAddOns() {
     await this.nextToAddOnsButton.click();
     await this.page.waitForLoadState('networkidle');
+  }
+
+  // ===================== Dynamic Passenger Filling =====================
+  /**
+   * Classify passenger heading DOM nodes into adult/child/infant buckets.
+   * @returns {Promise<Array<{index:number,type:string,rawText:string}>>}
+   */
+  async classifyDomPassengerHeadings() {
+    const headingCount = await this.passengerHeadingLocator.count();
+    const results = [];
+    for (let i = 0; i < headingCount; i++) {
+      const raw = (await this.passengerHeadingLocator.nth(i).textContent()) || '';
+      const text = raw.trim();
+      let type = null;
+      if (/幼児/.test(text)) type = 'infant';
+      else if (/子供/.test(text)) type = 'child';
+      else if (/大人/.test(text) || /代表者/.test(text)) type = 'adult';
+      if (type) results.push({ index: i, type, rawText: text });
+    }
+    return results;
+  }
+
+  /**
+   * Map data passengers to DOM headings based on requested counts in flightSearch.
+   * @param {Array<Object>} dataPassengers passengers from sharedData (each must have a type field)
+   * @param {Object} flightSearch contains adultPassengerCount, childPassengerCount, infantPassengerCount
+   * @returns {Promise<Array<{domIndex:number,data:Object}>>}
+   */
+  async mapPassengersToDom(dataPassengers, flightSearch = {}) {
+    const dom = await this.classifyDomPassengerHeadings();
+    if (!dom.length) throw new Error('No passenger heading blocks found on Passenger Info page.');
+
+    // Organize data by type
+    const buckets = { adult: [], child: [], infant: [] };
+    for (const p of dataPassengers) {
+      const t = (p.type || '').toLowerCase();
+      if (!['adult','child','infant'].includes(t)) {
+        throw new Error(`Unknown passenger type '${p.type}' in testData.json`);
+      }
+      buckets[t].push(p);
+    }
+
+    const desired = {
+      adult: flightSearch.adultPassengerCount ?? buckets.adult.length,
+      child: flightSearch.childPassengerCount ?? buckets.child.length,
+      infant: flightSearch.infantPassengerCount ?? buckets.infant.length
+    };
+    // --- Dynamic auto-cloning logic ---
+    // If we have fewer data passengers than desired for a type but at least 1 sample, clone the first one.
+    const autoCloneType = (type) => {
+      const existing = buckets[type];
+      const need = desired[type];
+      if (existing.length === 0) return; // cannot clone if we have no template
+      if (existing.length >= need) return; // already enough
+      const template = existing[0];
+      for (let i = existing.length; i < need; i++) {
+        // Create a new shallow copy and adjust given name + date of birth.
+        const clone = { ...template };
+        // Append an alphabetic suffix (A, B, C, ... AA, AB ...) instead of digits (fields reject numbers).
+        const baseGiven = String(template.given || '').replace(/\d+$/, '').replace(/[A-Z]+$/,'');
+        const suffixIndex = i - existing.length; // first clone -> 0
+        const toLetters = (n) => {
+          let s = '';
+          n = n; // zero-based
+          do {
+            s = String.fromCharCode(65 + (n % 26)) + s;
+            n = Math.floor(n / 26) - 1; // classic spreadsheet column algorithm adjusted for zero-base
+          } while (n >= 0);
+          return s;
+        };
+        const letterSuffix = toLetters(suffixIndex); // A, B, C, ... Z, AA, AB, ...
+        clone.given = `${baseGiven}${letterSuffix}`; // e.g. TARO + A, TARO + B ...
+        // Adjust date of birth: add i days to original date safely.
+        const y = parseInt(template.y, 10) || 2000;
+        const m = parseInt(template.m, 10) || 1; // 1-12
+        const d = parseInt(template.d, 10) || 1; // 1-31
+        const baseDate = new Date(y, m - 1, d);
+        const shifted = new Date(baseDate.getTime() + (i * 24 * 60 * 60 * 1000)); // add i days
+        clone.y = String(shifted.getFullYear());
+        clone.m = String(shifted.getMonth() + 1).padStart(2,'0');
+        clone.d = String(shifted.getDate()).padStart(2,'0');
+        // Keep gender/nationality/surname/type same.
+        existing.push(clone);
+      }
+    };
+
+    autoCloneType('adult');
+    autoCloneType('child');
+    autoCloneType('infant');
+
+    // After cloning, trim any excess if data list was longer than desired.
+    for (const key of Object.keys(buckets)) {
+      if (buckets[key].length > desired[key]) {
+        buckets[key] = buckets[key].slice(0, desired[key]);
+      }
+    }
+
+    if (desired.infant > desired.adult) {
+      throw new Error(`Invalid passenger mix requested: ${desired.infant} infants but only ${desired.adult} adults.`);
+    }
+
+    const counters = { adult: 0, child: 0, infant: 0 };
+    const assigned = [];
+    for (const block of dom) {
+      const pool = buckets[block.type];
+      const used = counters[block.type];
+      if (used >= pool.length) {
+        // Extra DOM form beyond desired count -> skip
+        continue;
+      }
+      const dataPassenger = pool[used];
+      counters[block.type]++;
+      assigned.push({ domIndex: block.index, data: dataPassenger });
+    }
+
+    // Ensure DOM rendered at least desired count for each type
+    for (const t of ['adult','child','infant']) {
+      if (counters[t] < desired[t]) {
+        throw new Error(`Rendered ${t} forms (${counters[t]}) less than requested count (${desired[t]}).`);
+      }
+    }
+    return assigned;
+  }
+
+  /**
+   * Fill passenger forms given assignments (domIndex + data)
+   * @param {Array<{domIndex:number,data:Object}>} assignments
+   */
+  async fillPassengerForms(assignments) {
+    for (const { domIndex, data } of assignments) {
+      await this.fillNameKatakana(domIndex, data.surname, data.given);
+      await this.fillBirthDate(domIndex, data.y, data.m, data.d);
+      if (data.gender) {
+        await this.selectGender(String(domIndex), data.gender);
+      }
+      if (data.nationality) {
+        await this.selectNationality(String(domIndex), data.nationality);
+      }
+    }
+  }
+
+  /**
+   * Orchestrate dynamic passenger entry including contacts and return expected snapshot.
+   * @param {Array<Object>} dataPassengers from sharedData.passengers
+   * @param {Object} contacts from sharedData.contacts
+   * @param {Object} flightSearch search counts
+   * @returns {Promise<Array<Object>>} expectedPassengers snapshot
+   */
+  async fillAllPassengers(dataPassengers, contacts = {}, flightSearch = {}) {
+    const assignments = await this.mapPassengersToDom(dataPassengers, flightSearch);
+    await this.fillPassengerForms(assignments);
+    if (contacts.phone) await this.fillPhoneContact(contacts.phone);
+    if (contacts.domestic) {
+      await this.fillDomesticContactInformation(
+        contacts.domestic.nameKana,
+        contacts.domestic.phone,
+        contacts.domestic.relationship
+      );
+    }
+    return assignments.map(({ domIndex, data }) => ({
+      domIndex,
+      type: data.type,
+      surname: data.surname,
+      given: data.given,
+      y: data.y,
+      m: data.m,
+      d: data.d,
+      gender: data.gender,
+      nationality: data.nationality
+    }));
   }
 
 

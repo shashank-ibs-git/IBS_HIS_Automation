@@ -96,9 +96,14 @@ async selectAutoDates(monthsFromNow = 0) {
   await this.destinationDateField.click();
   await this.selectCalendarDate(ret.getMonth() + 1, ret.getFullYear(), ret.getDate());
 }
+
+async clickPassengerSelection() {
+  await this.passengerSelectionField.click();
+  await this.page.waitForTimeout(500); // small wait for UI to settle
+}
  
   async setAdultPassengerCount(desiredCount) {
-  await this.passengerSelectionField.click();
+  
   let valueField = this.page.locator("//dt[text()='大人　12歳以上']//parent::div//input").inputValue();
   const plusBtn = this.page.locator("//dt[text()='大人　12歳以上']//parent::div//button[contains(@class,'js-count-up')]");
   const minusBtn = this.page.locator("//dt[text()='大人　12歳以上']//parent::div//button[contains(@class,'js-count-down')]");
@@ -117,10 +122,72 @@ async selectAutoDates(monthsFromNow = 0) {
 }
 
   async setChildrenPassengerCount(desiredCount) {
-  await this.passengerSelectionField.click();
-  let valueField = this.page.locator("//dt[text()='子供　2〜11歳']//parent::div//input").inputValue();
+  //await this.passengerSelectionField.click();
+  const valueFieldLocator = this.page.locator("//dt[text()='子供　2〜11歳']//parent::div//input");
   const plusBtn = this.page.locator("//dt[text()='子供　2〜11歳']//parent::div//button[contains(@class,'js-count-up')]");
   const minusBtn = this.page.locator("//dt[text()='子供　2〜11歳']//parent::div//button[contains(@class,'js-count-down')]");
+
+  let current = parseInt(await valueFieldLocator.inputValue(), 10);
+
+  if (current !== desiredCount) {
+    const btn = desiredCount > current ? plusBtn : minusBtn;
+    while (current !== desiredCount) {
+      await btn.click();
+      current = parseInt(await valueFieldLocator.inputValue(), 10);
+    }
+  }
+
+  // Select age for each child dropdown rendered (one per child).
+  // Strategy: assign ages incrementally starting at 2歳 (minimum) up to 11歳 (cap).
+  // For child i (0-based) target age label = (2 + i)歳 (so 1st child 2歳, 2nd 3歳, etc.).
+  // If that specific age option is missing, fall back to trying '3歳', then first selectable option.
+  if (desiredCount > 0) {
+    const childAgeDropdowns = this.page.locator("//select[contains(@class,'js-child-age')]");
+    await childAgeDropdowns.first().waitFor({ state: 'visible' });
+    const dropdownCount = await childAgeDropdowns.count();
+    if (dropdownCount !== desiredCount) {
+      console.warn(`⚠ Expected ${desiredCount} child age dropdown(s) but found ${dropdownCount}. Proceeding with available.`);
+    }
+    for (let i = 0; i < dropdownCount; i++) {
+      const dd = childAgeDropdowns.nth(i);
+      const targetAge = Math.min(11, 2 + i); // clamp to 11歳
+      const targetLabel = `${targetAge}歳`;
+      try {
+        // Try preferred incremental age first
+        await dd.selectOption({ label: targetLabel });
+      } catch (e) {
+        // Fallback attempts: try '3歳', then any available option beyond placeholder.
+        try {
+          await dd.selectOption({ label: '3歳' });
+        } catch (e2) {
+          const options = await dd.locator('option').all();
+          // Skip potential placeholder at index 0 if it has empty value
+          let chosen = false;
+            for (let oi = 0; oi < options.length; oi++) {
+              const val = (await options[oi].getAttribute('value')) || '';
+              if (val.trim() !== '') {
+                await dd.selectOption({ index: oi });
+                chosen = true;
+                break;
+              }
+            }
+            if (!chosen) {
+              console.warn(`Child age dropdown at index ${i} has no selectable non-empty options.`);
+            }
+        }
+      }
+    }
+  }
+
+}
+
+
+
+async setInfantPassengerCount(desiredCount) {
+  //await this.passengerSelectionField.click();
+  let valueField = this.page.locator("//dt[text()='幼児（座席不要） 0〜1歳']//parent::div//input").inputValue();
+  const plusBtn = this.page.locator("//dt[text()='幼児（座席不要） 0〜1歳']//parent::div//button[contains(@class,'js-count-up')]");
+  const minusBtn = this.page.locator("//dt[text()='幼児（座席不要） 0〜1歳']//parent::div//button[contains(@class,'js-count-down')]");
 
   let current = parseInt(await valueField);
 
@@ -130,18 +197,9 @@ async selectAutoDates(monthsFromNow = 0) {
 
   while (current !== desiredCount) {
     await btn.click();
-    valueField = this.page.locator("//dt[text()='子供　2〜11歳']//parent::div//input").inputValue();
+    valueField = this.page.locator("//dt[text()='幼児（座席不要） 0〜1歳']//parent::div//input").inputValue();
     current = parseInt(await valueField);
   }
-  //hardcoded to select age 2 for first child
-  if (desiredCount > 0) {
-    const childAgeDropdown = this.  page.locator("//select[contains(@class,'js-child-age')]");
-    await childAgeDropdown.waitFor({ state: 'visible' });
-    await childAgeDropdown.selectOption({ label: '3歳' });
-  }
-  //setInfantPassengerCount();
-  const plusBtn1 = this.page.locator("//dt[text()='幼児（座席不要） 0〜1歳']//parent::div//button[contains(@class,'js-count-up')]");
-  await plusBtn1.click();
 }
 
 async selectSeatClass(value) {

@@ -7,28 +7,7 @@ const { pickFirstNonEmpty, normalizeDob, formatDob, toPageGender } = require('..
 const ASSERT_TIMEOUT_FALLBACK = 10000;
 
 
-Given('the user launches the Flight BASE application', /** @this {CustomWorld} */ async function () {
-  await this.utils.waitForSpinnerToDisappear();
-  await this.poManager.getTopPage().goto();
-});
-
-Then('the Top Page should display header, product tabs, and search form', /** @this {CustomWorld} */ async function () {
-  const ASSERT_TIMEOUT = this.ASSERT_TIMEOUT ?? ASSERT_TIMEOUT_FALLBACK;
-  this.topPage = this.poManager.getTopPage();
-  //action- pop page object
-  await expect.soft(this.topPage.headerLogo).toBeVisible({ timeout: ASSERT_TIMEOUT });
-  await expect.soft(this.topPage.flightTab).toBeVisible({ timeout: ASSERT_TIMEOUT });
-  await expect.soft(this.topPage.flightHotelTab).toBeVisible({ timeout: ASSERT_TIMEOUT });
-  await expect.soft(this.topPage.hotelTab).toBeVisible({ timeout: ASSERT_TIMEOUT });
-  await expect.soft(this.topPage.localTourTab).toBeVisible({ timeout: ASSERT_TIMEOUT });
-  await expect.soft(this.topPage.carRentalTab).toBeVisible({ timeout: ASSERT_TIMEOUT });
-});
-
-Then('the “Flight” tab should be selected by default in Japanese', /** @this {CustomWorld} */ async function () {
-  await expect.soft(this.topPage.flightTab).toHaveClass(/is-active/);
-  const label = this.sharedData?.flight?.flightTabLabel || '航空券';
-  await expect.soft(this.topPage.flightTab).toHaveText(label);
-});
+// Shared Given/Then moved to common.steps.js to avoid duplication & ambiguity.
 
 // More tolerant regex step to handle potential minor spacing or character variations
 When(/the user selects Round Trip with flight search data\s+(.+)\s+to\s+(.+)\s+carrier\s+(\S+)\s+seat class\s+(\S+)\s+adult\s+(\d+)\s+child\s+(\d+)\s+infant\s+(\d+)/, /** @this {CustomWorld} */ async function (departureAirport, destinationAirport, carrier, seatClass, adultCountStr, childCountStr, infantCountStr) {
@@ -55,6 +34,7 @@ When(/the user selects Round Trip with flight search data\s+(.+)\s+to\s+(.+)\s+c
   expect(await this.topPage.selectSeatClass(flight.seatClass)).toBeTruthy();
   await this.topPage.confirmPassengerSelection();
   await this.topPage.searchButton.click();
+// await this.page.context().browser().close()
 });
 
 
@@ -225,7 +205,16 @@ Then('Input Confirmation Page should load and display passenger details', /** @t
   const applicantValuesFromConfirmInputPage = Object.values(applicantInfoFromConfirmInputPage);
 
   // Compare both value of Applicant Information directly from Passenger Info and Confirm Input pages
-  expect(applicantValuesFromConfirmInputPage).toEqual(this.applicantValuesFromPassengerInfoPage);
+  // Date formatting on different pages may drop leading zero on day or month (e.g. 2000年1月01日 vs 2000年1月1日).
+  const normalizeDate = (val) => {
+    if (typeof val !== 'string') return val;
+    // Match patterns like 2000年01月09日 or 2000年1月9日 and normalize to no zero padding OR choose a canonical padded form.
+    // We'll remove zero padding so both variants match.
+    return val.replace(/(\d{4})年0?(\d{1,2})月0?(\d{1,2})日/, (_, y, m, d) => `${y}年${m}月${d}日`);
+  };
+  const normExpected = (this.applicantValuesFromPassengerInfoPage || []).map(normalizeDate);
+  const normActual   = applicantValuesFromConfirmInputPage.map(normalizeDate);
+  expect(normActual).toEqual(normExpected);
 
   // --- Field labels on the page (handle minor variants) ---
   const LABELS = this.sharedData?.labels || { surname: [], given: [], dob: [], gender: [], nation: [] };

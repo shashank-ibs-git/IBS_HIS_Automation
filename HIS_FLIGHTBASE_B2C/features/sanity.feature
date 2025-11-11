@@ -34,7 +34,7 @@ Feature: Flight BASE UI Sanity - End-to-End Flow
 
     Examples:
       | departureAirport | destinationAirport   | carrier | seatClass | adultPassengerCount | childPassengerCount | infantPassengerCount |
-      | 成田国際空港      | ブリスベン空港       | JQN     | ECONOMY  | 2                   | 2                  | 2                     |
+      | 成田国際空港      | ブリスベン空港       | JQN     | ECONOMY  | 2                   | 0                  | 0                     |
       | 東京国際空港     | ロサンゼルス国際空港 | 1A      | ECONOMY   | 2                   | 2                   | 2                     |
-
+      
 

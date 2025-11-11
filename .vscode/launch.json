@@ -4,75 +4,19 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Cucumber: Run all features",
+      "name": "Cucumber: Debug current feature (fail-fast)",
       "program": "${workspaceFolder}/node_modules/@cucumber/cucumber/bin/cucumber-js",
       "cwd": "${workspaceFolder}",
-      "args": ["HIS_FLIGHTBASE_B2C/features/**/*.feature"],
-      "env": {
-        "NODE_OPTIONS": "--enable-source-maps",
-        "PWDEBUG": "0"
-      },
-      "console": "integratedTerminal",
-      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
-    },
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Cucumber: Debug (Playwright Inspector)",
-      "program": "${workspaceFolder}/node_modules/@cucumber/cucumber/bin/cucumber-js",
-      "cwd": "${workspaceFolder}",
-      "args": ["HIS_FLIGHTBASE_B2C/features/**/*.feature"],
-      "env": {
-        "NODE_OPTIONS": "--enable-source-maps",
-        "PWDEBUG": "1"
-      },
-      "console": "integratedTerminal",
-      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
-    },
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Cucumber: Debug (sanity dataset)",
-      "program": "${workspaceFolder}/node_modules/@cucumber/cucumber/bin/cucumber-js",
-      "cwd": "${workspaceFolder}",
-      "args": ["HIS_FLIGHTBASE_B2C/features/sanity.feature"],
+      "args": ["-p", "single", "${relativeFile}"],
       "env": {
         "NODE_OPTIONS": "--enable-source-maps",
         "PWDEBUG": "1",
-        "TEST_DATA": "sanity"
+        "FAIL_FAST": "true"
       },
       "console": "integratedTerminal",
-      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
-    },
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Cucumber: Debug (family dataset)",
-      "program": "${workspaceFolder}/node_modules/@cucumber/cucumber/bin/cucumber-js",
-      "cwd": "${workspaceFolder}",
-      "args": ["HIS_FLIGHTBASE_B2C/features/sanity.feature"],
-      "env": {
-        "NODE_OPTIONS": "--enable-source-maps",
-        "PWDEBUG": "1",
-        "TEST_DATA": "family"
-      },
-      "console": "integratedTerminal",
-      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
-    },
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Cucumber: Debug (custom dataset - edit TEST_DATA)",
-      "program": "${workspaceFolder}/node_modules/@cucumber/cucumber/bin/cucumber-js",
-      "cwd": "${workspaceFolder}",
-      "args": ["HIS_FLIGHTBASE_B2C/features/sanity.feature"],
-      "env": {
-        "NODE_OPTIONS": "--enable-source-maps",
-        "PWDEBUG": "1",
-        "TEST_DATA": "sanity" // <-- change to any dataset name present in testData/ folder
-      },
-      "console": "integratedTerminal",
-      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"]
+      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/node_modules/**"],
+      "internalConsoleOptions": "neverOpen"
     }
-  ]
+  ],
+  "inputs": []
 }

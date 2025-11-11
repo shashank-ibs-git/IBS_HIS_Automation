@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "test": "node scripts/run-base.js",
-    "test:parallel": "node scripts/run-parallel.js"
+    "test:parallel": "node scripts/run-parallel.js",
+    "cuke:all": "cucumber-js -p all",
+    "cuke:one": "cucumber-js -p single",
+    "cuke:env": "cucumber-js -p envSingle"
   },
   "keywords": [],
   "author": "",

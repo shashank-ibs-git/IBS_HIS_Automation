@@ -8,7 +8,7 @@
   },
   "headless": false,
   "login": {
-    "email": "shashank.channegowda@ibsplc.com",
-    "password": "TestingIBS123!"
+    "email": "Enter_Email_Address",
+    "password": "Enter_Password"
   }
 }

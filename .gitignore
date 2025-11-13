@@ -8,3 +8,32 @@ node_modules/
 /playwright/.auth/
 /screenshots/
 /reports/
+
+# Cucumber HTML report output (if generated)
+cucumber-report/
+
+# Environment / secrets placeholders
+.env
+.env.local
+
+
+# OS / Editor files
+Thumbs.db
+*.DS_Store
+
+# Logs & debug artifacts
+*.log
+debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Coverage & caches
+coverage/
+.nyc_output/
+.cache/
+
+# Build artifacts if any future packaging
+dist/
+build/
